@@ -291,7 +291,7 @@ export function startAgentRun(opts: StartAgentRunOptions): AgentRunHandle {
         result,
         killedByStop,
         stopEscalation,
-        stderr,
+        stderr: stderr ? `${stderr}\n${err.message}` : err.message,
       };
       emitter.emit('close', summary);
       resolve(summary);

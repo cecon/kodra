@@ -157,6 +157,7 @@ describe('startAgentRun', () => {
     expect(received).not.toBeNull();
     expect((received as unknown as Error).message).toContain('ENOENT');
     expect(summary.exitCode).toBeNull();
+    expect(summary.stderr).toContain('spawn ENOENT');
   });
 
   it('appends system prompt and tools when provided', async () => {

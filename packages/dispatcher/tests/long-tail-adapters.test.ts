@@ -3,6 +3,7 @@ import { acpAdapter } from '../src/adapters/acp.js';
 import { agyCliAdapter } from '../src/adapters/agy-cli.js';
 import { ccrCliAdapter } from '../src/adapters/ccr-cli.js';
 import { claudeCodeAdapter } from '../src/adapters/claude-code.js';
+import { codexCliAdapter } from '../src/adapters/codex-cli.js';
 import { copilotCliAdapter } from '../src/adapters/copilot-cli.js';
 import { cursorCliAdapter } from '../src/adapters/cursor-cli.js';
 import { droidCliAdapter } from '../src/adapters/droid-cli.js';
@@ -128,6 +129,47 @@ describe('claudeCodeAdapter', () => {
     expect(args).toContain('--model');
     expect(args).toContain('claude-opus-4-7');
     expect(args).not.toContain('claude-sonnet-5');
+  });
+});
+
+describe('codexCliAdapter', () => {
+  it('keeps the sandbox flags for fresh exec runs', () => {
+    expect(
+      codexCliAdapter.buildArgs({
+        model: 'gpt-x',
+        extraArgs: ['--verbose'],
+      }),
+    ).toEqual([
+      'exec',
+      '--json',
+      '--skip-git-repo-check',
+      '--sandbox',
+      'workspace-write',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '-m',
+      'gpt-x',
+      '--verbose',
+    ]);
+  });
+
+  it('omits --sandbox when resuming a session', () => {
+    expect(
+      codexCliAdapter.buildArgs({
+        resumeFromSessionId: 'sess-123',
+        model: 'gpt-x',
+        extraArgs: ['--verbose'],
+      }),
+    ).toEqual([
+      'exec',
+      'resume',
+      'sess-123',
+      '--json',
+      '--skip-git-repo-check',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '-m',
+      'gpt-x',
+      '--verbose',
+    ]);
   });
 });
 

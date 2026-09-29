@@ -120,17 +120,12 @@ export const codexCliAdapter: AgentCliAdapter = {
     if (isResume) {
       args.push('resume', opts.resumeFromSessionId as string);
     }
-    args.push(
-      '--json',
-      '--skip-git-repo-check',
-      // workspace-write keeps writes confined to cwd; combined with the
-      // bypass flag below, codex won't prompt for approval per command.
-      // The dispatcher already runs each agent inside an isolated worktree,
-      // so this is the analogue of claude's `--permission-mode bypassPermissions`.
-      '--sandbox',
-      'workspace-write',
-      '--dangerously-bypass-approvals-and-sandbox',
-    );
+    args.push('--json', '--skip-git-repo-check');
+    if (!isResume) {
+      // `resume` rejects `--sandbox`; the bypass flag below still disables sandboxing.
+      args.push('--sandbox', 'workspace-write');
+    }
+    args.push('--dangerously-bypass-approvals-and-sandbox');
     if (opts.model) {
       args.push('-m', opts.model);
     }
