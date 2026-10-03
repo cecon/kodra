@@ -34,6 +34,7 @@ import { ToolUseCard } from '../run/ToolUseCard.js';
 import { CreatePrModal } from './CreatePrModal.js';
 import { ModalFrame } from './ModalFrame.js';
 import { priorityColor, tagColor } from '../board/boardStyle.js';
+import { alpha } from '@mui/material/styles';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -384,7 +385,7 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
         </Box>
       }
     >
-      <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+      <Box data-detail-scroller sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         {forkError || stopError ? (
           <Alert severity="error" sx={{ m: 2, mb: 0 }} role="alert">
             {forkError ?? stopError}
@@ -1800,76 +1801,67 @@ function ThreadTab({
   const sectionRef = useRef<HTMLDivElement | null>(null);
   useStickToBottom(sectionRef, [items.length, stream.events.length, isRunning]);
 
-  if (items.length === 0 && !isRunning) {
-    return (
-      <>
-        <div className="kb-tdm-section" ref={sectionRef}>
-          <h3>Agent thread</h3>
-          <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-            No agent activity yet. Reply below to start the conversation.
-          </div>
-        </div>
-        <PrCommentsSection issueNumber={issueNumber} />
-      </>
-    );
-  }
+  const runNote = displayRun ? (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography variant="caption" color="text.secondary">
+        run #{displayRun.id} · {STATUS_LABEL[displayRun.status]}
+        {isLive ? '' : ` · ended ${ageString(displayRun.endedAt ?? displayRun.startedAt)} ago`}
+      </Typography>
+      {displayRun.status === 'running' || displayRun.status === 'starting' ? (
+        <KodraPulse tone="mint" />
+      ) : null}
+    </Stack>
+  ) : null;
 
   return (
     <>
-      <div className="kb-tdm-section" ref={sectionRef}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>Agent thread</h3>
-          {displayRun ? (
-            <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-              run #{displayRun.id} · {STATUS_LABEL[displayRun.status]}
-              {isLive
-                ? ''
-                : ` · ended ${ageString(displayRun.endedAt ?? displayRun.startedAt)} ago`}
-            </span>
-          ) : null}
-          {displayRun != null &&
-          (displayRun.status === 'running' || displayRun.status === 'starting') ? (
-            <KodraPulse tone="mint" style={{ alignSelf: 'center' }} />
-          ) : null}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {items.map((it) =>
-            it.kind === 'message' ? (
-              <MessageRow
-                key={it.id}
-                message={it.message}
-                cards={it.cards}
-                agentLabel={labelForMessage(it.message)}
-              />
-            ) : it.event.type === 'tool_use' ? (
-              <ToolUseCard
-                key={it.id}
-                toolUse={it.event}
-                result={resultByToolUseId.get(toolUseIdOf(it.event)) ?? null}
-                isLive={isLive}
-              />
-            ) : (
-              <EventRow key={it.id} event={it.event} agentLabel={agentLabel} />
-            ),
+      <Box ref={sectionRef}>
+        <TabSection title="Agent thread" action={runNote}>
+          {items.length === 0 && !isRunning ? (
+            <Typography variant="body2" color="text.secondary">
+              No agent activity yet. Reply below to start the conversation.
+            </Typography>
+          ) : (
+            <Stack spacing={1.25}>
+              {items.map((it) =>
+                it.kind === 'message' ? (
+                  <MessageRow
+                    key={it.id}
+                    message={it.message}
+                    cards={it.cards}
+                    agentLabel={labelForMessage(it.message)}
+                  />
+                ) : it.event.type === 'tool_use' ? (
+                  <ToolUseCard
+                    key={it.id}
+                    toolUse={it.event}
+                    result={resultByToolUseId.get(toolUseIdOf(it.event)) ?? null}
+                    isLive={isLive}
+                  />
+                ) : (
+                  <EventRow key={it.id} event={it.event} agentLabel={agentLabel} />
+                ),
+              )}
+              {isRunning && displayRun ? (
+                <AgentSpinner
+                  seed={displayRun.id}
+                  startedAt={displayRun.startedAt}
+                  tokensOut={displayRun.tokenUsageOutput ?? null}
+                />
+              ) : null}
+              {displayRun && displayRun.status === 'complete' ? (
+                <CompletionActions
+                  runId={displayRun.id}
+                  issueNumber={issueNumber}
+                  issueLabels={issueLabels}
+                  issueStatus={issueStatus}
+                  onChanged={onActionDone}
+                />
+              ) : null}
+            </Stack>
           )}
-          {isRunning && displayRun ? (
-            <AgentSpinner
-              seed={displayRun.id}
-              startedAt={displayRun.startedAt}
-              tokensOut={displayRun.tokenUsageOutput ?? null}
-            />
-          ) : null}
-          {displayRun && displayRun.status === 'complete' ? (
-            <CompletionActions
-              runId={displayRun.id}
-              issueNumber={issueNumber}
-              issueLabels={issueLabels}
-              issueStatus={issueStatus}
-              onChanged={onActionDone}
-            />
-          ) : null}
-        </div>
-      </div>
+        </TabSection>
+      </Box>
       <PrCommentsSection issueNumber={issueNumber} />
     </>
   );
@@ -1951,70 +1943,65 @@ function PrCommentsSection({ issueNumber }: { issueNumber: IssueRef }) {
   const conversationComments = comments.filter((c) => !c.inline);
 
   return (
-    <div className="kb-pr-comments">
-      <div className="kb-pr-comments-head">
-        <GitHubGlyph />
-        <span>PR review</span>
-        {data?.linkedPullNumber !== undefined && data.linkedPullNumber !== null ? (
-          <a
+    <TabSection
+      title="PR review"
+      action={
+        data?.linkedPullNumber !== undefined && data.linkedPullNumber !== null ? (
+          <Stack
+            direction="row"
+            spacing={0.75}
+            component="a"
             href={data.linkedPullHtmlUrl ?? '#'}
             target="_blank"
             rel="noreferrer noopener"
-            style={{ color: 'var(--ink-3)', marginLeft: 4 }}
+            sx={{ alignItems: 'center', color: 'text.secondary', textDecoration: 'none' }}
           >
-            #{data.linkedPullNumber}
-          </a>
+            <GitHubGlyph />
+            <Typography variant="caption">#{data.linkedPullNumber}</Typography>
+          </Stack>
+        ) : null
+      }
+    >
+      <Stack spacing={1.25}>
+        {error ? <Alert severity="error">{error}</Alert> : null}
+        {comments.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No comments on the PR yet.
+          </Typography>
         ) : null}
-      </div>
-      {error ? (
-        <div style={{ color: 'var(--failed)', fontSize: 12, marginBottom: 8 }}>{error}</div>
-      ) : null}
-      {comments.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 8 }}>
-          No comments on the PR yet.
-        </div>
-      ) : null}
-      {conversationComments.map((c) => (
-        <PrCommentRow key={`c${c.id}`} comment={c} />
-      ))}
-      {inlineGroups.map((group) => (
-        <div key={`g:${group.filePath}`}>
-          <div className="kb-pr-comment-file">{group.filePath}</div>
-          {group.comments.map((c) => (
-            <PrCommentRow key={`i${c.id}`} comment={c} />
-          ))}
-        </div>
-      ))}
-      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <textarea
+        {conversationComments.map((c) => (
+          <PrCommentRow key={`c${c.id}`} comment={c} />
+        ))}
+        {inlineGroups.map((group) => (
+          <Stack key={`g:${group.filePath}`} spacing={1}>
+            <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
+              {group.filePath}
+            </Typography>
+            {group.comments.map((c) => (
+              <PrCommentRow key={`i${c.id}`} comment={c} />
+            ))}
+          </Stack>
+        ))}
+        <TextField
+          multiline
+          minRows={2}
+          size="small"
           value={replyBody}
           onChange={(e) => setReplyBody(e.target.value)}
           placeholder="Reply on the PR…"
-          rows={2}
-          style={{
-            background: 'var(--bg-1)',
-            border: '1px solid var(--hairline)',
-            borderRadius: 8,
-            padding: '6px 9px',
-            fontSize: 12.5,
-            color: 'var(--ink-1)',
-            outline: 'none',
-            fontFamily: 'inherit',
-            resize: 'vertical',
-          }}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            className="kb-btn ghost"
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            size="small"
+            variant="outlined"
             disabled={posting || replyBody.trim().length === 0}
             onClick={() => void onSubmitReply()}
           >
             {posting ? 'Posting…' : 'Reply on PR'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Box>
+      </Stack>
+    </TabSection>
   );
 }
 
@@ -2039,47 +2026,37 @@ function groupInlineComments(comments: ReadonlyArray<PrCommentPayload>): InlineC
 
 function PrCommentRow({ comment }: { comment: PrCommentPayload }) {
   const login = comment.author.login;
-  const initials = login.slice(0, 2).toUpperCase();
-  const tone = colorForLogin(login);
   return (
-    <div className="kb-pr-comment">
-      {comment.author.avatarUrl ? (
-        <img className="kb-pr-comment-avatar" src={comment.author.avatarUrl} alt={login} />
-      ) : (
-        <span
-          className="kb-pr-comment-avatar"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: tone,
-            color: 'var(--bg-1)',
-            fontSize: 10,
-            fontWeight: 600,
-          }}
-        >
-          {initials}
-        </span>
-      )}
-      <div>
-        <div className="kb-pr-comment-meta">
-          <a
+    <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
+      <Avatar
+        {...(comment.author.avatarUrl ? { src: comment.author.avatarUrl } : {})}
+        alt={login}
+        sx={{ width: 26, height: 26, fontSize: 10, bgcolor: colorForLogin(login) }}
+      >
+        {login.slice(0, 2).toUpperCase()}
+      </Avatar>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary" component="div">
+          <Box
+            component="a"
             href={comment.htmlUrl}
             target="_blank"
             rel="noreferrer noopener"
-            style={{ color: 'var(--ink-1)', fontWeight: 500 }}
+            sx={{ color: 'text.primary', fontWeight: 500, textDecoration: 'none' }}
           >
             {login}
-          </a>
+          </Box>
           {' · '}
           {ageString(comment.createdAt)} ago
           {comment.inline && comment.lineNumber !== undefined
             ? ` · line ${comment.lineNumber}`
             : ''}
-        </div>
-        <div className="kb-pr-comment-body">{comment.body}</div>
-      </div>
-    </div>
+        </Typography>
+        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {comment.body}
+        </Typography>
+      </Box>
+    </Stack>
   );
 }
 
@@ -2105,7 +2082,7 @@ function useStickToBottom(
   useEffect(() => {
     const el = anchorRef.current;
     if (!el) return;
-    const scroller = el.closest('.kb-modal-main') as HTMLElement | null;
+    const scroller = el.closest('[data-detail-scroller]') as HTMLElement | null;
     scrollerRef.current = scroller;
     if (!scroller) return;
     const onScroll = (): void => {
@@ -2184,21 +2161,19 @@ function CompletionActions({
   }
 
   return (
-    <div
-      style={{
-        border: '1px solid var(--accent-line)',
-        borderRadius: 8,
-        padding: 12,
-        background: 'color-mix(in oklch, var(--bg-1) 80%, var(--accent-soft))',
-      }}
+    <Alert
+      severity="success"
+      variant="outlined"
+      icon={false}
+      sx={{ '& .MuiAlert-message': { width: '100%' } }}
     >
-      <div style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 8 }}>
-        <b style={{ color: 'var(--accent)' }}>Run complete.</b> What's next?
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <button
-          type="button"
-          className="kb-btn ghost"
+      <Typography variant="body2" sx={{ mb: 1.25 }}>
+        <strong>Run complete.</strong> What&apos;s next?
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <Button
+          size="small"
+          variant="outlined"
           disabled={busy !== null}
           onClick={() =>
             void call(
@@ -2213,10 +2188,10 @@ function CompletionActions({
           }
         >
           {busy === 'review' ? 'Spawning…' : 'Review code'}
-        </button>
-        <button
-          type="button"
-          className="kb-btn ghost"
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
           disabled={busy !== null || alreadyDone}
           onClick={() =>
             void call(
@@ -2234,26 +2209,33 @@ function CompletionActions({
             : alreadyDone
               ? 'Marked complete'
               : 'Mark as complete'}
-        </button>
-        <button
-          type="button"
-          className="kb-btn ghost"
-          disabled={busy !== null}
-          onClick={() => {
-            setError(null);
-            setInfo(null);
-            setPrModalOpen(true);
-          }}
-          title="Drafts a title + body from this run's diff, then opens the PR with your edits."
-        >
-          Open draft PR
-        </button>
-      </div>
+        </Button>
+        <Tooltip title="Drafts a title + body from this run's diff, then opens the PR with your edits.">
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={busy !== null}
+              onClick={() => {
+                setError(null);
+                setInfo(null);
+                setPrModalOpen(true);
+              }}
+            >
+              Open draft PR
+            </Button>
+          </span>
+        </Tooltip>
+      </Stack>
       {info ? (
-        <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 8 }}>{info}</div>
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+          {info}
+        </Typography>
       ) : null}
       {error ? (
-        <div style={{ fontSize: 11, color: 'var(--failed)', marginTop: 8 }}>error: {error}</div>
+        <Typography variant="caption" color="error" component="div" sx={{ mt: 1 }}>
+          error: {error}
+        </Typography>
       ) : null}
       {prModalOpen ? (
         <CreatePrModal
@@ -2266,9 +2248,45 @@ function CompletionActions({
           }}
         />
       ) : null}
-    </div>
+    </Alert>
   );
 }
+
+/** A message bubble: user messages neutral, agent messages tinted. */
+function Bubble({
+  agent,
+  label,
+  createdAt,
+  children,
+}: {
+  agent: boolean;
+  label: string;
+  createdAt: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box
+      sx={(t) => ({
+        px: 1.5,
+        py: 1.25,
+        borderRadius: 1.5,
+        border: 1,
+        borderColor: agent ? alpha(t.palette.primary.main, 0.35) : t.palette.divider,
+        bgcolor: agent ? alpha(t.palette.primary.main, 0.06) : t.palette.background.default,
+      })}
+    >
+      <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
+        <Box component="b" sx={{ color: agent ? 'primary.main' : 'text.primary' }}>
+          {label}
+        </Box>{' '}
+        · {ageString(createdAt)} ago
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+const bubbleTextSx = { whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 };
 
 function MessageRow({
   message,
@@ -2280,53 +2298,27 @@ function MessageRow({
   /** Provider-derived label for agent messages (e.g. "OpenCode"). */
   agentLabel: string;
 }) {
+  const decisions = cards.map((c) =>
+    c.type === 'decision' ? <DecisionInline key={c.id} card={c as Card<DecisionPayload>} /> : null,
+  );
   if (message.role === 'system') {
     return (
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--ink-3)',
-          textAlign: 'center',
-          padding: '4px 0',
-        }}
-      >
-        — {message.body} · {ageString(message.createdAt)} ago —
-        {cards.map((c) =>
-          c.type === 'decision' ? (
-            <DecisionInline key={c.id} card={c as Card<DecisionPayload>} />
-          ) : null,
-        )}
-      </div>
+      <Box sx={{ textAlign: 'center', py: 0.5 }}>
+        <Typography variant="caption" color="text.secondary">
+          — {message.body} · {ageString(message.createdAt)} ago —
+        </Typography>
+        {decisions}
+      </Box>
     );
   }
   const isUser = message.role === 'user';
-  const label = isUser ? 'you' : agentLabel;
-  const labelColor = isUser ? 'var(--ink-1)' : 'var(--accent)';
-  const bg = isUser ? 'var(--bg-2)' : 'color-mix(in oklch, var(--bg-1) 80%, var(--accent-soft))';
-  const border = isUser ? 'var(--hairline)' : 'var(--accent-line)';
   return (
-    <div
-      style={{
-        background: bg,
-        border: `1px solid ${border}`,
-        borderRadius: 8,
-        padding: '10px 12px',
-      }}
-    >
-      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 5 }}>
-        <b style={{ color: labelColor }}>{label}</b> · {ageString(message.createdAt)} ago
-      </div>
-      <div
-        style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-1)', whiteSpace: 'pre-wrap' }}
-      >
+    <Bubble agent={!isUser} label={isUser ? 'you' : agentLabel} createdAt={message.createdAt}>
+      <Typography variant="body2" sx={bubbleTextSx}>
         {message.body}
-      </div>
-      {cards.map((c) =>
-        c.type === 'decision' ? (
-          <DecisionInline key={c.id} card={c as Card<DecisionPayload>} />
-        ) : null,
-      )}
-    </div>
+      </Typography>
+      {decisions}
+    </Bubble>
   );
 }
 
@@ -2362,50 +2354,56 @@ function DecisionInline({ card }: { card: Card<DecisionPayload> }) {
   }
 
   return (
-    <div
-      className="kb-decision"
-      role="region"
-      aria-label="Agent question"
-      style={{ marginTop: 10 }}
-    >
-      <div className="kb-decision-opts">
-        {isPending ? (
-          <KodraPulse
-            tone="violet"
-            size={7}
-            label="Awaiting your decision"
-            style={{ alignSelf: 'center' }}
-          />
-        ) : null}
+    <Box role="region" aria-label="Agent question" sx={{ mt: 1.25 }}>
+      <Stack
+        direction="row"
+        spacing={0.75}
+        sx={{ flexWrap: 'wrap', rowGap: 0.75, alignItems: 'center' }}
+      >
+        {isPending ? <KodraPulse tone="violet" size={7} label="Awaiting your decision" /> : null}
         {card.payload.options.map((opt, i) => (
-          <button
+          <Button
             key={opt.value}
-            type="button"
-            className={`kb-decision-opt${submitting === opt.value ? ' chosen' : ''}`}
+            size="small"
+            color="warning"
+            variant={submitting === opt.value ? 'contained' : 'outlined'}
             disabled={!isPending || submitting !== null}
             onClick={() => void pick(opt.value)}
+            startIcon={
+              <Box component="span" sx={{ ...monoChipSx, fontSize: 11, opacity: 0.7 }}>
+                {i + 1}
+              </Box>
+            }
           >
-            <span className="num">{i + 1}</span>
             {opt.label}
-          </button>
+          </Button>
         ))}
         {isPending ? (
-          <button
-            key="__dismiss"
-            type="button"
-            className="kb-decision-opt dismiss"
-            disabled={submitting !== null}
-            onClick={() => void dismiss()}
-            title="Dismiss this decision and stop the run"
-          >
-            Dismiss
-          </button>
+          <Tooltip title="Dismiss this decision and stop the run">
+            <span>
+              <Button
+                size="small"
+                color="secondary"
+                disabled={submitting !== null}
+                onClick={() => void dismiss()}
+              >
+                Dismiss
+              </Button>
+            </span>
+          </Tooltip>
         ) : null}
-      </div>
-      {isResolved ? <div className="kb-decision-resolved-note">resolved</div> : null}
-      {isDismissed ? <div className="kb-decision-resolved-note">dismissed</div> : null}
-      {error ? <div className="kb-decision-resolved-note">error: {error}</div> : null}
-    </div>
+      </Stack>
+      {isResolved || isDismissed || error ? (
+        <Typography
+          variant="caption"
+          color={error ? 'error' : 'text.secondary'}
+          component="div"
+          sx={{ mt: 0.5 }}
+        >
+          {error ? `error: ${error}` : isResolved ? 'resolved' : 'dismissed'}
+        </Typography>
+      ) : null}
+    </Box>
   );
 }
 
@@ -2413,37 +2411,24 @@ function EventRow({ event, agentLabel }: { event: AgentEvent; agentLabel: string
   if (event.type === 'text') {
     const text = (event.payload as { text?: string }).text ?? '';
     return (
-      <div
-        style={{
-          background: 'color-mix(in oklch, var(--bg-1) 80%, var(--accent-soft))',
-          border: '1px solid var(--accent-line)',
-          borderRadius: 8,
-          padding: '10px 12px',
-        }}
-      >
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 5 }}>
-          <b style={{ color: 'var(--accent)' }}>{agentLabel}</b> · {ageString(event.createdAt)} ago
-        </div>
-        <div
-          style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-1)', whiteSpace: 'pre-wrap' }}
-        >
+      <Bubble agent label={agentLabel} createdAt={event.createdAt}>
+        <Typography variant="body2" sx={bubbleTextSx}>
           {text}
-        </div>
-      </div>
+        </Typography>
+      </Bubble>
     );
   }
   if (event.type === 'error') {
     const p = event.payload as { message?: string };
     return (
-      <div className="kb-tcall" style={{ borderColor: 'var(--failed)' }}>
-        <div className="kb-tcall-head">
-          <span className="name" style={{ color: 'var(--failed)' }}>
-            error
-          </span>
-          <span className="arg">{p.message ?? 'unknown'}</span>
-          <span className="dur">{ageString(event.createdAt)} ago</span>
-        </div>
-      </div>
+      <Alert severity="error" variant="outlined" sx={{ py: 0.25 }}>
+        <Typography variant="body2" sx={monoChipSx}>
+          {p.message ?? 'unknown'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {ageString(event.createdAt)} ago
+        </Typography>
+      </Alert>
     );
   }
   if (event.type === 'containment_warning') {
@@ -2458,23 +2443,17 @@ function EventRow({ event, agentLabel }: { event: AgentEvent; agentLabel: string
       `${p.tool ?? 'tool'} → ${(p.paths ?? []).join(', ') || '(unknown path)'}` +
       (p.heuristic ? ' (heuristic)' : '');
     return (
-      <div
-        className="kb-tcall"
-        style={{
-          borderColor: 'var(--warning, #c47a00)',
-          background: 'color-mix(in oklch, var(--bg-1) 80%, #c47a0033)',
-        }}
-      >
-        <div className="kb-tcall-head">
-          <span className="name" style={{ color: 'var(--warning, #c47a00)' }}>
-            ⚠ containment {p.mode === 'pause' ? 'pause' : 'warn'}
-          </span>
-          <span className="arg" title={p.reason}>
-            {arg}
-          </span>
-          <span className="dur">{ageString(event.createdAt)} ago</span>
-        </div>
-      </div>
+      <Alert severity="warning" variant="outlined" sx={{ py: 0.25 }}>
+        <Typography variant="subtitle2">
+          Containment {p.mode === 'pause' ? 'pause' : 'warn'}
+        </Typography>
+        <Typography variant="body2" sx={monoChipSx} title={p.reason}>
+          {arg}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {ageString(event.createdAt)} ago
+        </Typography>
+      </Alert>
     );
   }
   return null;
