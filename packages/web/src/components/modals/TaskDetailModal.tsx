@@ -47,6 +47,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
+import { IconButton, IconsaxIcon } from '@kanbots/ui';
+import { Add, CloseCircle } from 'iconsax-react';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { renderMarkdown } from '../../lib/markdown.js';
@@ -1133,25 +1136,35 @@ function ParentBreadcrumb({
   );
 }
 
-function statusBadge(status: StatusKey | null): { label: string; cls: string } {
-  // Mirrors the status pill conventions used elsewhere — kept inline to
-  // avoid pulling another file in just for the colour map. The labels
-  // here are short forms suitable for a tight list row.
+function statusBadge(status: StatusKey | null): {
+  label: string;
+  color: 'secondary' | 'primary' | 'success' | 'info';
+} {
+  // Short forms suitable for a tight list row.
   switch (status) {
     case 'backlog':
-      return { label: 'backlog', cls: 'kb-sub-issue-status-backlog' };
+      return { label: 'backlog', color: 'secondary' };
     case 'todo':
-      return { label: 'todo', cls: 'kb-sub-issue-status-todo' };
+      return { label: 'todo', color: 'primary' };
     case 'inProgress':
-      return { label: 'in progress', cls: 'kb-sub-issue-status-running' };
+      return { label: 'in progress', color: 'success' };
     case 'review':
-      return { label: 'review', cls: 'kb-sub-issue-status-review' };
+      return { label: 'review', color: 'info' };
     case 'done':
-      return { label: 'done', cls: 'kb-sub-issue-status-done' };
+      return { label: 'done', color: 'success' };
     default:
-      return { label: 'inbox', cls: 'kb-sub-issue-status-inbox' };
+      return { label: 'inbox', color: 'secondary' };
   }
 }
+
+/** The bordered surface used for markdown, descriptions and list rows. */
+const panelSx = {
+  p: 2,
+  borderRadius: 1,
+  border: 1,
+  borderColor: 'divider',
+  bgcolor: 'background.default',
+};
 
 /**
  * Renders the list of child sub-issues for `parentNumber` plus an
@@ -1216,68 +1229,87 @@ function SubIssuesSection({
   }
 
   return (
-    <div className="kb-tdm-section kb-sub-issues">
-      <h3>Sub-issues</h3>
-      {error ? (
-        <div className="kb-sub-issues-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {loading ? (
-        <div className="kb-sub-issues-empty">Loading…</div>
-      ) : children.length === 0 && !adding ? (
-        <div className="kb-sub-issues-empty">No sub-issues yet.</div>
-      ) : (
-        <div className="kb-sub-issues-list">
-          {children.map((rel) => {
+    <TabSection title="Sub-issues">
+      <Stack spacing={1}>
+        {error ? (
+          <Alert severity="error" role="alert">
+            {error}
+          </Alert>
+        ) : null}
+        {loading ? (
+          <Typography variant="body2" color="text.secondary">
+            Loading…
+          </Typography>
+        ) : children.length === 0 && !adding ? (
+          <Typography variant="body2" color="text.secondary">
+            No sub-issues yet.
+          </Typography>
+        ) : (
+          children.map((rel) => {
             const badge = statusBadge(rel.child.status);
             return (
-              <div key={rel.id} className="kb-sub-issue-row">
-                <span className={`kb-sub-issue-pill ${badge.cls}`}>{badge.label}</span>
-                <button
-                  type="button"
-                  className="kb-sub-issue-open"
+              <Stack key={rel.id} direction="row" spacing={1} sx={{ ...rowSx, py: 0.5, pr: 0.5 }}>
+                <Chip size="small" variant="light" color={badge.color} label={badge.label} />
+                <Button
+                  color="inherit"
                   onClick={() => onOpenDetail?.(rel.child.number)}
                   disabled={!onOpenDetail}
                   title={`Open #${rel.child.number}`}
+                  sx={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', textTransform: 'none' }}
                 >
-                  <span className="kb-sub-issue-num">#{rel.child.number}</span>
-                  <span className="kb-sub-issue-title">{rel.child.title}</span>
-                </button>
+                  <Box component="span" sx={{ ...monoChipSx, color: 'text.secondary', mr: 1 }}>
+                    #{rel.child.number}
+                  </Box>
+                  <Box
+                    component="span"
+                    sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {rel.child.title}
+                  </Box>
+                </Button>
                 {rel.child.state === 'closed' ? (
-                  <span className="kb-sub-issue-closed">closed</span>
+                  <Chip size="small" variant="light" color="info" label="closed" />
                 ) : null}
-                <button
-                  type="button"
-                  className="kb-sub-issue-unlink"
-                  onClick={() => void handleRemove(rel.id)}
-                  title="Unlink (the issue is not deleted)"
-                  aria-label={`Unlink #${rel.child.number}`}
-                >
-                  ×
-                </button>
-              </div>
+                <Tooltip title="Unlink (the issue is not deleted)">
+                  <IconButton
+                    size="small"
+                    color="secondary"
+                    onClick={() => void handleRemove(rel.id)}
+                    aria-label={`Unlink #${rel.child.number}`}
+                  >
+                    <IconsaxIcon icon={CloseCircle} size={16} />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
             );
-          })}
-        </div>
-      )}
-      {adding ? (
-        <SubIssueAddPicker
-          parentNumber={parentNumber}
-          existing={new Set(children.map((c) => c.child.number))}
-          allIssues={allIssues}
-          onPick={(n) => void handleAdd(n)}
-          onCancel={() => {
-            setAdding(false);
-            setError(null);
-          }}
-        />
-      ) : (
-        <button type="button" className="kb-sub-issue-add" onClick={() => setAdding(true)}>
-          + Add sub-issue
-        </button>
-      )}
-    </div>
+          })
+        )}
+        {adding ? (
+          <SubIssueAddPicker
+            parentNumber={parentNumber}
+            existing={new Set(children.map((c) => c.child.number))}
+            allIssues={allIssues}
+            onPick={(n) => void handleAdd(n)}
+            onCancel={() => {
+              setAdding(false);
+              setError(null);
+            }}
+          />
+        ) : (
+          <Box>
+            <Button
+              size="small"
+              color="secondary"
+              variant="outlined"
+              startIcon={<IconsaxIcon icon={Add} size={16} />}
+              onClick={() => setAdding(true)}
+            >
+              Add sub-issue
+            </Button>
+          </Box>
+        )}
+      </Stack>
+    </TabSection>
   );
 }
 
@@ -1314,7 +1346,7 @@ function SubIssueAddPicker({
     const q = query.trim().toLowerCase();
     const filtered = allIssues.filter((i) => {
       if (String(i.number) === String(parentNumber)) return false;
-      if (![...existing].some((n) => String(n) === String(i.number))) return false;
+      if ([...existing].some((n) => String(n) === String(i.number))) return false;
       if (!q) return true;
       const numStr = `#${i.number}`;
       return (
@@ -1325,38 +1357,42 @@ function SubIssueAddPicker({
   }, [allIssues, query, parentNumber, existing]);
 
   return (
-    <div className="kb-sub-issue-picker">
-      <div className="kb-sub-issue-picker-row">
-        <input
-          type="text"
-          className="kb-input kb-sub-issue-input"
+    <Box sx={panelSx}>
+      <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+        <TextField
+          size="small"
+          fullWidth
           placeholder="Search by # or title…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
         />
-        <button type="button" className="kb-btn ghost" onClick={onCancel}>
+        <Button color="secondary" onClick={onCancel}>
           Cancel
-        </button>
-      </div>
-      <div className="kb-sub-issue-matches">
-        {matches.length === 0 ? (
-          <div className="kb-sub-issues-empty">No matches.</div>
-        ) : (
-          matches.map((i) => (
-            <button
+        </Button>
+      </Stack>
+      {matches.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No matches.
+        </Typography>
+      ) : (
+        <Stack>
+          {matches.map((i) => (
+            <Button
               key={String(i.number)}
-              type="button"
-              className="kb-sub-issue-match"
+              color="inherit"
               onClick={() => onPick(i.number)}
+              sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
             >
-              <span className="kb-sub-issue-num">#{i.number}</span>
-              <span className="kb-sub-issue-title">{i.title}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
+              <Box component="span" sx={{ ...monoChipSx, color: 'text.secondary', mr: 1 }}>
+                #{i.number}
+              </Box>
+              {i.title}
+            </Button>
+          ))}
+        </Stack>
+      )}
+    </Box>
   );
 }
 
@@ -1391,69 +1427,60 @@ function OverviewTab({
       {issue.sentryMeta ? <SentryAnalysisSection issue={issue} /> : null}
       <AgentSessionSection run={displayRun} />
 
-      <div className="kb-tdm-section">
-        <h3>Description</h3>
-        <div className="kb-desc-md">{issue.body || '(no description)'}</div>
-      </div>
+      <TabSection title="Description">
+        <Typography
+          variant="body2"
+          component="div"
+          sx={{ ...panelSx, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}
+        >
+          {issue.body || '(no description)'}
+        </Typography>
+      </TabSection>
 
       <SubIssuesSection parentNumber={issue.number} {...(onOpenDetail ? { onOpenDetail } : {})} />
 
       {savedSpec?.content !== null && savedSpec?.content !== undefined ? (
-        <div className="kb-tdm-section">
-          <h3>Spec</h3>
-          <div
+        <TabSection title="Spec">
+          <Box
             className="kb-desc-md"
+            sx={panelSx}
             dangerouslySetInnerHTML={{ __html: renderMarkdown(savedSpec.content) }}
           />
-        </div>
+        </TabSection>
       ) : null}
 
       {acItems.length > 0 ? (
-        <div className="kb-tdm-section">
-          <h3>Spec — extracted from AC: block</h3>
-          <ul
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-            }}
-          >
+        <TabSection title="Spec — extracted from AC: block">
+          <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
             {acItems.map((item, i) => (
-              <li
+              <Stack
+                component="li"
                 key={i}
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  padding: '5px 0',
-                  fontSize: 12.5,
-                  color: 'var(--ink-1)',
-                }}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'flex-start' }}
               >
-                <span
-                  style={{
-                    width: 13,
-                    height: 13,
-                    borderRadius: 3,
-                    border: '1px solid var(--hairline)',
-                    background: 'var(--bg-2)',
-                    flexShrink: 0,
-                    marginTop: 2,
-                  }}
+                <Box
                   aria-hidden
+                  sx={{
+                    width: 14,
+                    height: 14,
+                    mt: 0.4,
+                    borderRadius: 0.5,
+                    border: 1,
+                    borderColor: 'divider',
+                    flexShrink: 0,
+                  }}
                 />
-                {item}
-              </li>
+                <Typography variant="body2">{item}</Typography>
+              </Stack>
             ))}
-          </ul>
-        </div>
+          </Stack>
+        </TabSection>
       ) : null}
 
       {recentToolCalls.length > 0 ? (
-        <div className="kb-tdm-section">
-          <h3>What the agent did just now</h3>
+        <TabSection title="What the agent did just now">
           {recentToolCalls.map((ev) => (
             <ToolUseCard
               key={ev.id}
@@ -1462,7 +1489,7 @@ function OverviewTab({
               isLive={false}
             />
           ))}
-        </div>
+        </TabSection>
       ) : null}
     </>
   );
@@ -1490,29 +1517,38 @@ function AgentSessionSection({ run }: { run: AgentRun | null }) {
   }
 
   return (
-    <div className="kb-tdm-section">
-      <h3>Agent session</h3>
-      <div className="kb-tdm-session-row">
-        <span className="kb-chip mono">{providerLabel}</span>
-        <span className="kb-chip mono kb-tdm-session-chip" title={run.sessionId}>
-          <span className="kb-tdm-session-id">{run.sessionId}</span>
-        </span>
-        <button
-          type="button"
-          className="kb-btn ghost"
+    <TabSection title="Agent session">
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+        <Chip size="small" variant="outlined" label={providerLabel} />
+        <Tooltip title={run.sessionId}>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={run.sessionId}
+            sx={{ ...monoChipSx, maxWidth: 360 }}
+          />
+        </Tooltip>
+        <Button
+          size="small"
+          color={copyOk ? 'success' : 'secondary'}
           onClick={() => void copySession()}
-          title={copyOk ? 'Copied!' : hasResumeCommand ? 'Copy resume command' : 'Copy session ID'}
           aria-label={hasResumeCommand ? 'Copy resume command' : 'Copy session ID'}
         >
           {copyOk ? 'Copied' : hasResumeCommand ? 'Copy command' : 'Copy ID'}
-        </button>
-      </div>
-      <div className="kb-tdm-session-hint">
+        </Button>
+      </Stack>
+      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }}>
         {hasResumeCommand ? 'Resume this session in your terminal' : 'Provider-specific session ID'}
-      </div>
-    </div>
+      </Typography>
+    </TabSection>
   );
 }
+
+const SENTRY_STATUS_LABEL: Record<string, string> = {
+  analyzed: 'analyzed',
+  applied: 'applied',
+  upstream_resolved: 'upstream resolved',
+};
 
 function SentryAnalysisSection({ issue }: { issue: IssueDetailPayload['issue'] }) {
   const meta = issue.sentryMeta;
@@ -1553,93 +1589,117 @@ function SentryAnalysisSection({ issue }: { issue: IssueDetailPayload['issue'] }
   }
 
   return (
-    <div className="kb-tdm-section kb-sentry-section">
-      <h3>
-        Sentry{' '}
-        <span className="kb-sentry-section-status" data-status={meta.status}>
-          {meta.status === 'analyzed'
-            ? 'analyzed'
-            : meta.status === 'applied'
-              ? 'applied'
-              : meta.status === 'upstream_resolved'
-                ? 'upstream resolved'
-                : 'unreviewed'}
-        </span>
-      </h3>
-      <div className="kb-sentry-section-meta">
+    <TabSection
+      title="Sentry"
+      action={
+        <Chip
+          size="small"
+          variant="light"
+          color={meta.status === 'imported' ? 'error' : 'secondary'}
+          label={SENTRY_STATUS_LABEL[meta.status] ?? 'unreviewed'}
+        />
+      }
+    >
+      <Stack spacing={1.25}>
         {meta.errorType ? (
-          <code>
+          <Box component="code" sx={{ ...panelSx, ...monoChipSx, p: 1.25, fontSize: 12 }}>
             {meta.errorType}: {meta.errorValue ?? ''}
-          </code>
+          </Box>
         ) : null}
-        <div className="kb-sentry-section-row">
-          <span>Occurrences: {meta.count}</span>
-          {meta.culprit ? <span>Where: {meta.culprit}</span> : null}
-          {meta.permalink ? (
-            <a href={meta.permalink} target="_blank" rel="noreferrer noopener">
-              View in Sentry ↗
-            </a>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary">
+            Occurrences: {meta.count}
+          </Typography>
+          {meta.culprit ? (
+            <Typography variant="body2" color="text.secondary">
+              Where: {meta.culprit}
+            </Typography>
           ) : null}
-        </div>
-      </div>
-
-      {error ? <div className="kb-sentry-error">{error}</div> : null}
-
-      {suggestion ? (
-        <div className="kb-sentry-suggestion">
-          <div className="kb-sentry-suggestion-head">
-            <span
-              className={`kb-sentry-verdict kb-sentry-verdict-${suggestion.verdict}`}
-              title={`Confidence: ${suggestion.confidence} · Category: ${suggestion.category}`}
+          {meta.permalink ? (
+            <Typography
+              variant="body2"
+              component="a"
+              href={meta.permalink}
+              target="_blank"
+              rel="noreferrer noopener"
+              sx={{ color: 'primary.main' }}
             >
-              {suggestion.verdict === 'task' ? 'Recommend converting to task' : 'Likely skippable'}
-            </span>
-            <span className="kb-sentry-confidence">
-              {suggestion.confidence} confidence · {suggestion.category}
-            </span>
-          </div>
-          <p className="kb-sentry-reasoning">{suggestion.reasoning}</p>
-          <div className="kb-sentry-suggestion-fields">
-            <div>
+              View in Sentry ↗
+            </Typography>
+          ) : null}
+        </Stack>
+
+        {error ? <Alert severity="error">{error}</Alert> : null}
+
+        {suggestion ? (
+          <Box sx={panelSx}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+              <Tooltip
+                title={`Confidence: ${suggestion.confidence} · Category: ${suggestion.category}`}
+              >
+                <Chip
+                  size="small"
+                  variant="light"
+                  color={suggestion.verdict === 'task' ? 'warning' : 'secondary'}
+                  label={
+                    suggestion.verdict === 'task'
+                      ? 'Recommend converting to task'
+                      : 'Likely skippable'
+                  }
+                />
+              </Tooltip>
+              <Typography variant="caption" color="text.secondary">
+                {suggestion.confidence} confidence · {suggestion.category}
+              </Typography>
+            </Stack>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {suggestion.reasoning}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
               <strong>Suggested title:</strong> {suggestion.suggestedTitle}
-            </div>
+            </Typography>
             <details>
               <summary>Suggested body</summary>
-              <pre className="kb-sentry-body-preview">{suggestion.suggestedBody}</pre>
+              <Box
+                component="pre"
+                sx={{ ...monoChipSx, whiteSpace: 'pre-wrap', fontSize: 12, mt: 1, mb: 0 }}
+              >
+                {suggestion.suggestedBody}
+              </Box>
             </details>
-          </div>
-          <div className="kb-sentry-suggestion-actions">
-            <button
-              type="button"
-              className="kb-btn primary"
-              onClick={() => void handleApply()}
-              disabled={applying || meta.status === 'applied'}
-            >
-              {meta.status === 'applied' ? 'Applied' : applying ? 'Applying…' : 'Convert to task'}
-            </button>
-            <button
-              type="button"
-              className="kb-btn ghost"
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => void handleApply()}
+                disabled={applying || meta.status === 'applied'}
+              >
+                {meta.status === 'applied' ? 'Applied' : applying ? 'Applying…' : 'Convert to task'}
+              </Button>
+              <Button
+                size="small"
+                color="secondary"
+                onClick={() => void handleAnalyze()}
+                disabled={analyzing}
+              >
+                {analyzing ? 'Re-analyzing…' : 'Re-analyze'}
+              </Button>
+            </Stack>
+          </Box>
+        ) : (
+          <Box>
+            <Button
+              size="small"
+              variant="contained"
               onClick={() => void handleAnalyze()}
               disabled={analyzing}
             >
-              {analyzing ? 'Re-analyzing…' : 'Re-analyze'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="kb-sentry-suggestion-actions">
-          <button
-            type="button"
-            className="kb-btn primary"
-            onClick={() => void handleAnalyze()}
-            disabled={analyzing}
-          >
-            {analyzing ? 'Analyzing…' : 'Analyze'}
-          </button>
-        </div>
-      )}
-    </div>
+              {analyzing ? 'Analyzing…' : 'Analyze'}
+            </Button>
+          </Box>
+        )}
+      </Stack>
+    </TabSection>
   );
 }
 
