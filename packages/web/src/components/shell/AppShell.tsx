@@ -45,6 +45,13 @@ import { LeftRail } from '../rail/LeftRail.js';
 import { Logo } from '../Logo.js';
 
 /**
+ * The app chrome sits below every legacy overlay: modals, menus, palette,
+ * tray and toasts use z-index 30–100 in the old CSS, wherever they render.
+ * MUI's own popovers and dialogs keep their usual 1300+.
+ */
+const CHROME_Z_INDEX = { drawer: 20, appBar: 21 };
+
+/**
  * MUI theme for the app shell, following Kodra's own theme preference
  * (dark / paper) so there is a single theme switch.
  */
@@ -55,7 +62,7 @@ export function ShellTheme({ theme, children }: { theme: Theme; children: ReactN
   );
   return (
     <ConfigProvider value={config}>
-      <ThemeCustomization>{children}</ThemeCustomization>
+      <ThemeCustomization zIndex={CHROME_Z_INDEX}>{children}</ThemeCustomization>
     </ConfigProvider>
   );
 }

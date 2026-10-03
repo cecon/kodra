@@ -82,7 +82,7 @@ export default function Header({
       // on the translucent light background.
       color: 'text.primary',
       backdropFilter: 'blur(8px)',
-      zIndex: 1200,
+      zIndex: theme.zIndex.appBar,
       width: {
         xs: '100%',
         md: drawerOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : `calc(100% - ${MINI_DRAWER_WIDTH}px)`,

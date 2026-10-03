@@ -30,11 +30,3 @@
   height: auto;
   white-space: normal;
 }
-
-/* Legacy floating UI (modals, palette, tray, updater toasts) uses z-index
-   40–100. As a group it must sit above the MUI app bar and drawer (1200),
-   at the level MUI gives its own modals. */
-.kb-overlays {
-  position: relative;
-  z-index: 1300;
-}

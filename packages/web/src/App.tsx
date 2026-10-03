@@ -263,93 +263,87 @@ function ShellHost({
           onOpenStats={() => setStatsOpen(true)}
         />
       </AppShell>
-      {/* Legacy overlays (modals, palette, tray, toasts) stack below 100; lift
-          them as a group above the MUI chrome (app bar / drawer at 1200). */}
-      <div className="kb-overlays">
-        {detailIssueNumber !== null ? (
-          <TaskDetailModal
-            issueNumber={detailIssueNumber}
-            onClose={closeDetail}
-            onOpenDetail={openDetail}
-          />
-        ) : null}
-        {createOpen ? (
-          <TaskCreateModal
-            onClose={() => setCreateOpen(false)}
-            onCreated={handleCreated}
-            initialDescription={createInitialDescription}
-          />
-        ) : null}
-        {tweaks.showTray ? <Tray onJump={(n) => setSelectedNumber(n)} /> : null}
-        <UpdaterToast />
-        <UpdateModal />
-        <BacklogToast />
-        <Palette
-          open={paletteOpen}
-          selectedNumber={selectedNumber}
-          onClose={() => setPaletteOpen(false)}
-          onJump={(n) => setSelectedNumber(n)}
-          onOpenCreate={openCreate}
+      {detailIssueNumber !== null ? (
+        <TaskDetailModal
+          issueNumber={detailIssueNumber}
+          onClose={closeDetail}
           onOpenDetail={openDetail}
-          onOpenSplit={(n) => setSplitTargetNumber(n)}
-          onResolveTopDecision={shortcutHandlers.onResolveTopDecision}
         />
-        {splitTargetNumber !== null ? (
-          <SplitModal
-            parentNumber={splitTargetNumber}
-            parentTitle={
-              issues.find((i) => String(i.number) === String(splitTargetNumber))?.title ??
-              `#${splitTargetNumber}`
-            }
-            onClose={() => setSplitTargetNumber(null)}
-          />
-        ) : null}
-        {archiveOpen ? (
-          <ArchiveModal onClose={() => setArchiveOpen(false)} onOpenDetail={openDetail} />
-        ) : null}
-        {statsOpen ? <Stats onClose={() => setStatsOpen(false)} /> : null}
-        {providersSettingsOpen ? (
-          <ProvidersSettingsModal onClose={() => setProvidersSettingsOpen(false)} />
-        ) : null}
-        {cloudSettingsOpen ? (
-          <CloudSettingsModal onClose={() => setCloudSettingsOpen(false)} />
-        ) : null}
-        {houseRulesOpen ? (
-          <HouseRulesSettingsModal onClose={() => setHouseRulesOpen(false)} />
-        ) : null}
-        {scriptsOpen !== null ? (
-          <RepoScriptsSettingsModal
-            onClose={() => setScriptsOpen(null)}
-            {...(scriptsOpen.autoRun ? { autoRun: scriptsOpen.autoRun } : {})}
-          />
-        ) : null}
-        {sentrySettingsOpen ? (
-          <SentrySettingsModal onClose={() => setSentrySettingsOpen(false)} />
-        ) : null}
-        {memorySettingsOpen ? (
-          <MemorySettingsModal onClose={() => setMemorySettingsOpen(false)} />
-        ) : null}
-        {reposOpen ? <WorkspaceReposSettingsModal onClose={() => setReposOpen(false)} /> : null}
-        {cardTemplatesOpen ? (
-          <CardTemplatesSettingsModal onClose={() => setCardTemplatesOpen(false)} />
-        ) : null}
-        {tweaksOpen ? (
-          <TweaksPanel
-            tweaks={tweaks}
-            onSet={setTweak}
-            onReset={resetTweaks}
-            onClose={() => setTweaksOpen(false)}
-            onOpenPalette={() => {
-              setTweaksOpen(false);
-              setPaletteOpen(true);
-            }}
-            {...(pausedAgent ? { onFocusPaused: () => setSelectedNumber(pausedAgent.number) } : {})}
-            {...(reviewReady ? { onFocusReview: () => setSelectedNumber(reviewReady.number) } : {})}
-            notifyOnRunComplete={notifyOnRunComplete}
-            {...(getBridge() ? { onSetNotifyOnRunComplete: setNotifyOnRunComplete } : {})}
-          />
-        ) : null}
-      </div>
+      ) : null}
+      {createOpen ? (
+        <TaskCreateModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={handleCreated}
+          initialDescription={createInitialDescription}
+        />
+      ) : null}
+      {tweaks.showTray ? <Tray onJump={(n) => setSelectedNumber(n)} /> : null}
+      <UpdaterToast />
+      <UpdateModal />
+      <BacklogToast />
+      <Palette
+        open={paletteOpen}
+        selectedNumber={selectedNumber}
+        onClose={() => setPaletteOpen(false)}
+        onJump={(n) => setSelectedNumber(n)}
+        onOpenCreate={openCreate}
+        onOpenDetail={openDetail}
+        onOpenSplit={(n) => setSplitTargetNumber(n)}
+        onResolveTopDecision={shortcutHandlers.onResolveTopDecision}
+      />
+      {splitTargetNumber !== null ? (
+        <SplitModal
+          parentNumber={splitTargetNumber}
+          parentTitle={
+            issues.find((i) => String(i.number) === String(splitTargetNumber))?.title ??
+            `#${splitTargetNumber}`
+          }
+          onClose={() => setSplitTargetNumber(null)}
+        />
+      ) : null}
+      {archiveOpen ? (
+        <ArchiveModal onClose={() => setArchiveOpen(false)} onOpenDetail={openDetail} />
+      ) : null}
+      {statsOpen ? <Stats onClose={() => setStatsOpen(false)} /> : null}
+      {providersSettingsOpen ? (
+        <ProvidersSettingsModal onClose={() => setProvidersSettingsOpen(false)} />
+      ) : null}
+      {cloudSettingsOpen ? (
+        <CloudSettingsModal onClose={() => setCloudSettingsOpen(false)} />
+      ) : null}
+      {houseRulesOpen ? <HouseRulesSettingsModal onClose={() => setHouseRulesOpen(false)} /> : null}
+      {scriptsOpen !== null ? (
+        <RepoScriptsSettingsModal
+          onClose={() => setScriptsOpen(null)}
+          {...(scriptsOpen.autoRun ? { autoRun: scriptsOpen.autoRun } : {})}
+        />
+      ) : null}
+      {sentrySettingsOpen ? (
+        <SentrySettingsModal onClose={() => setSentrySettingsOpen(false)} />
+      ) : null}
+      {memorySettingsOpen ? (
+        <MemorySettingsModal onClose={() => setMemorySettingsOpen(false)} />
+      ) : null}
+      {reposOpen ? <WorkspaceReposSettingsModal onClose={() => setReposOpen(false)} /> : null}
+      {cardTemplatesOpen ? (
+        <CardTemplatesSettingsModal onClose={() => setCardTemplatesOpen(false)} />
+      ) : null}
+      {tweaksOpen ? (
+        <TweaksPanel
+          tweaks={tweaks}
+          onSet={setTweak}
+          onReset={resetTweaks}
+          onClose={() => setTweaksOpen(false)}
+          onOpenPalette={() => {
+            setTweaksOpen(false);
+            setPaletteOpen(true);
+          }}
+          {...(pausedAgent ? { onFocusPaused: () => setSelectedNumber(pausedAgent.number) } : {})}
+          {...(reviewReady ? { onFocusReview: () => setSelectedNumber(reviewReady.number) } : {})}
+          notifyOnRunComplete={notifyOnRunComplete}
+          {...(getBridge() ? { onSetNotifyOnRunComplete: setNotifyOnRunComplete } : {})}
+        />
+      ) : null}
     </ShellTheme>
   );
 }

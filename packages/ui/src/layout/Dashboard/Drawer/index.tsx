@@ -56,7 +56,7 @@ export default function MainDrawer({ open, onClose, header, children, footer }: 
   return (
     <Box
       component="nav"
-      sx={{ flexShrink: { md: 0 }, zIndex: 1200 }}
+      sx={{ flexShrink: { md: 0 }, zIndex: theme.zIndex.drawer }}
       aria-label="workspace navigation"
     >
       {!downMD ? (

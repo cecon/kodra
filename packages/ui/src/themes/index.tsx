@@ -22,11 +22,16 @@ import type { CustomShadowProps } from '../types/theme';
 
 type ThemeCustomizationProps = {
   children: ReactNode;
+  /**
+   * Stacking levels for the app bar and drawer. A host that still renders
+   * legacy overlays with low z-indexes can sink the chrome below them.
+   */
+  zIndex?: { appBar?: number; drawer?: number };
 };
 
 // ==============================|| DEFAULT THEME - MAIN  ||============================== //
 
-export default function ThemeCustomization({ children }: ThemeCustomizationProps) {
+export default function ThemeCustomization({ children, zIndex }: ThemeCustomizationProps) {
   const { themeDirection, mode, presetColor, fontFamily, themeContrast } = useConfig();
   let themeMode = mode;
   if (themeMode === ThemeMode.AUTO) {
@@ -78,8 +83,9 @@ export default function ThemeCustomization({ children }: ThemeCustomizationProps
       },
       customShadows: themeCustomShadows,
       typography: themeTypography,
+      ...(zIndex && { zIndex }),
     }),
-    [themeDirection, theme, themeTypography, themeCustomShadows],
+    [themeDirection, theme, themeTypography, themeCustomShadows, zIndex],
   );
 
   const themes: Theme = createTheme(themeOptions);
