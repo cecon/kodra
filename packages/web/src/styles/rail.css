@@ -868,13 +868,6 @@
   color: var(--running);
   font-variant-numeric: tabular-nums;
 }
-.kb-rail-item .kb-rail-row-pulse .kb-pulse-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--running);
-  animation: kb-pulse 1.4s infinite;
-}
 
 /* Live agents mini-cards */
 .kb-swarm-card {

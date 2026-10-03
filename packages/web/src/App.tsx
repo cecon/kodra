@@ -259,7 +259,6 @@ function ShellHost({
         <Board
           onOpenDetail={openDetail}
           onOpenCreate={() => openCreate()}
-          onOpenPalette={() => setPaletteOpen(true)}
           onOpenStats={() => setStatsOpen(true)}
         />
       </AppShell>
