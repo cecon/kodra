@@ -202,22 +202,6 @@
 .kb-status-pill.kb-state-review .kb-pulse {
   animation: none;
 }
-.kb-status-pill.kb-state-queued {
-  background: oklch(0.74 0.1 240 / 0.12);
-  color: var(--queued);
-  border-color: oklch(0.74 0.1 240 / 0.3);
-}
-.kb-status-pill.kb-state-queued .kb-pulse {
-  animation: none;
-}
-.kb-status-pill.kb-state-failed {
-  background: oklch(0.7 0.18 25 / 0.12);
-  color: var(--failed);
-  border-color: oklch(0.7 0.18 25 / 0.3);
-}
-.kb-status-pill.kb-state-failed .kb-pulse {
-  animation: none;
-}
 
 /* Review-card inline actions */
 

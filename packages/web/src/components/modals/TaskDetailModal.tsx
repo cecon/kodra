@@ -1,5 +1,4 @@
 import { KodraPulse } from '../KodraPulse.js';
-import { Logo } from '../Logo.js';
 import type { IssueRef } from '@kanbots/core';
 import {
   useCallback,
@@ -8,14 +7,13 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type MouseEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { api } from '../../api.js';
 import { SessionDropdown, useActiveSessionId } from '../chat/SessionDropdown.js';
 import { ModelPicker, PROVIDER_LABELS, type ModelPickerValue } from '../forms/ModelPicker.js';
 import { useFetch } from '../../hooks/useFetch.js';
-import { useFocusTrap } from '../../hooks/useFocusTrap.js';
 import { useFocusedRepo } from '../../hooks/useFocusedRepo.js';
 import { useIssues, dispatchIssuesRefetch, ISSUES_CHANGED_CHANNEL } from '../../hooks/useIssues.js';
 import { useIssueRunStream } from '../../hooks/useIssueRunStream.js';
@@ -33,6 +31,19 @@ import { PreviewPanel, type PreviewInspectSelection } from '../run/PreviewPanel.
 import { RunSummary } from '../run/RunSummary.js';
 import { ToolUseCard } from '../run/ToolUseCard.js';
 import { CreatePrModal } from './CreatePrModal.js';
+import { ModalFrame } from './ModalFrame.js';
+import { priorityColor, tagColor } from '../board/boardStyle.js';
+import Alert from '@mui/material/Alert';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { renderMarkdown } from '../../lib/markdown.js';
 import type {
   AgentEvent,
@@ -67,6 +78,25 @@ const TAB_LABELS: Record<DetailTab, string> = {
   runs: 'Runs',
 };
 type DetailTab = 'autopilot' | 'overview' | 'thread' | 'diff' | 'preview' | 'runs';
+
+const monoChipSx = { fontFamily: 'var(--ff-mono, monospace)' };
+
+function runStatusColor(
+  status: AgentRunStatus,
+): 'success' | 'warning' | 'error' | 'info' | 'secondary' {
+  switch (status) {
+    case 'running':
+      return 'success';
+    case 'awaiting_input':
+      return 'warning';
+    case 'failed':
+      return 'error';
+    case 'complete':
+      return 'info';
+    default:
+      return 'secondary';
+  }
+}
 
 const STATUS_LABEL: Record<AgentRunStatus, string> = {
   starting: 'STARTING',
@@ -149,7 +179,6 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
   const [viewedRunDetails, setViewedRunDetails] = useState<AgentRun | null>(null);
   const [stoppingRunId, setStoppingRunId] = useState<number | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
-  const modalRef = useFocusTrap<HTMLDivElement>(true);
   useEffect(() => {
     if (isAutopilot && tab !== 'autopilot' && tab !== 'thread') {
       // Default an autopilot card to its dedicated tab on load.
@@ -164,14 +193,6 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
     setViewedRunDetails(null);
     setStopError(null);
   }, [issueNumber]);
-
-  useEffect(() => {
-    function onKey(e: globalThis.KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   // Refetch this issue's detail whenever the main process signals a change.
   // Debounced so a burst of run-status flips collapses to one fetch.
@@ -194,10 +215,6 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
       }
     };
   }, [refetch]);
-
-  function stopInner(e: MouseEvent<HTMLDivElement>): void {
-    e.stopPropagation();
-  }
 
   const issue = data?.issue ?? null;
   const activeRun = data?.thread?.activeRun ?? null;
@@ -236,254 +253,119 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
     ? ['autopilot', 'overview']
     : ['overview', 'thread', 'diff', 'preview', 'runs'];
 
-  return (
-    <div className="kb-modal-scrim kb-app" onClick={onClose} role="dialog" aria-modal="true">
-      <div ref={modalRef} className="kb-modal" onClick={stopInner} tabIndex={-1}>
-        <div className="kb-modal-head">
-          <Logo size={11} withWordmark />
-          <span style={{ color: 'var(--ink-4)' }}>·</span>
-          <span className="num">#{issueNumber}</span>
-          <h2>{issue?.title ?? (loading ? 'Loading…' : 'Issue')}</h2>
-          <span className="grow" />
-          {isAutopilot && !isArchived ? (
-            <AutopilotStopButton issueNumber={issueNumber} onAfter={() => void refetch()} />
-          ) : null}
-          {!isAutopilot && activeRun && isRunning ? (
-            <>
-              <button
-                type="button"
-                className="kb-btn ghost"
-                disabled={stoppingRunId !== null}
-                onClick={() => void stopRun(activeRun.id)}
-              >
-                {stoppingRunId === activeRun.id ? 'Stopping…' : 'Stop'}
-              </button>
-              {stopError ? (
-                <span role="alert" style={{ color: 'var(--failed)', fontSize: 11 }}>
-                  {stopError}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-          {!isAutopilot ? (
-            <>
-              <button
-                type="button"
-                className="kb-btn ghost"
-                disabled={forking || displayRun === null}
-                onClick={() => {
-                  if (displayRun === null || forking) return;
-                  setForking(true);
-                  setForkError(null);
-                  void api
-                    .forkAgentRun(displayRun.id)
-                    .then(() => {
-                      setRunsRefreshKey((key) => key + 1);
-                      return refetch();
-                    })
-                    .catch((err: unknown) => {
-                      setForkError(err instanceof Error ? err.message : String(err));
-                    })
-                    .finally(() => setForking(false));
-                }}
-                title={displayRun === null ? 'No run to fork' : undefined}
-              >
-                {forking ? 'Forking…' : 'Fork run'}
-              </button>
-              {forkError ? (
-                <span role="alert" style={{ color: 'var(--failed)', fontSize: 11 }}>
-                  {forkError}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-          {!isAutopilot && displayRun ? (
-            <button type="button" className="kb-btn primary" onClick={() => setTab('preview')}>
-              Open preview ↗
-            </button>
-          ) : null}
-          {isArchived ? (
-            <button
-              type="button"
-              className="kb-btn ghost"
+  const headerActions = (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mr: 1 }}>
+      {isAutopilot && !isArchived ? (
+        <AutopilotStopButton issueNumber={issueNumber} onAfter={() => void refetch()} />
+      ) : null}
+      {!isAutopilot && activeRun && isRunning ? (
+        <Button
+          size="small"
+          color="error"
+          variant="outlined"
+          disabled={stoppingRunId !== null}
+          onClick={() => void stopRun(activeRun.id)}
+        >
+          {stoppingRunId === activeRun.id ? 'Stopping…' : 'Stop'}
+        </Button>
+      ) : null}
+      {!isAutopilot ? (
+        <Tooltip title={displayRun === null ? 'No run to fork' : 'Start a new run from this one'}>
+          <span>
+            <Button
+              size="small"
+              color="secondary"
+              disabled={forking || displayRun === null}
               onClick={() => {
-                void api.unarchiveIssue(issueNumber).then(() => {
-                  dispatchIssuesRefetch();
-                  onClose();
-                });
-              }}
-              title="Restore this task to the board"
-            >
-              Unarchive
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="kb-btn ghost"
-              onClick={() => {
-                const msg = isAutopilot
-                  ? 'Archive this autopilot task? Its session will be stopped. Child tasks remain.'
-                  : isRunning
-                    ? 'Archive this ticket? Its running agent will be stopped.'
-                    : 'Archive this ticket?';
-                if (!window.confirm(msg)) return;
-                void api.archiveIssue(issueNumber).then(() => {
-                  dispatchIssuesRefetch();
-                  onClose();
-                });
+                if (displayRun === null || forking) return;
+                setForking(true);
+                setForkError(null);
+                void api
+                  .forkAgentRun(displayRun.id)
+                  .then(() => {
+                    setRunsRefreshKey((key) => key + 1);
+                    return refetch();
+                  })
+                  .catch((err: unknown) => {
+                    setForkError(err instanceof Error ? err.message : String(err));
+                  })
+                  .finally(() => setForking(false));
               }}
             >
-              Archive
-            </button>
-          )}
-          <button
-            type="button"
-            className="x-btn"
-            onClick={onClose}
-            aria-label="Close (Esc)"
-            title="Close"
+              {forking ? 'Forking…' : 'Fork run'}
+            </Button>
+          </span>
+        </Tooltip>
+      ) : null}
+      {!isAutopilot && displayRun ? (
+        <Button size="small" variant="contained" onClick={() => setTab('preview')}>
+          Open preview ↗
+        </Button>
+      ) : null}
+      {isArchived ? (
+        <Tooltip title="Restore this task to the board">
+          <Button
+            size="small"
+            color="secondary"
+            onClick={() => {
+              void api.unarchiveIssue(issueNumber).then(() => {
+                dispatchIssuesRefetch();
+                onClose();
+              });
+            }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M6 6l12 12M18 6l-12 12" />
-            </svg>
-          </button>
-        </div>
+            Unarchive
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button
+          size="small"
+          color="secondary"
+          onClick={() => {
+            const msg = isAutopilot
+              ? 'Archive this autopilot task? Its session will be stopped. Child tasks remain.'
+              : isRunning
+                ? 'Archive this ticket? Its running agent will be stopped.'
+                : 'Archive this ticket?';
+            if (!window.confirm(msg)) return;
+            void api.archiveIssue(issueNumber).then(() => {
+              dispatchIssuesRefetch();
+              onClose();
+            });
+          }}
+        >
+          Archive
+        </Button>
+      )}
+    </Stack>
+  );
 
-        <div className="kb-modal-body">
-          <main className="kb-modal-main">
-            {issue ? (
-              <>
-                <div className={`kb-tdm-hero${isRunning ? ' running' : ''}`}>
-                  <ParentBreadcrumb
-                    childNumber={issue.number}
-                    {...(onOpenDetail ? { onOpenDetail } : {})}
-                  />
-                  <div className="kb-tdm-title-row">
-                    <span className="kb-tdm-num">#{issue.number}</span>
-                    <h1 className="kb-tdm-h1">{issue.title}</h1>
-                  </div>
-                  <div className="kb-tdm-meta-row">
-                    {activeRun ? (
-                      <span
-                        className={`kb-status-pill kb-state-${
-                          activeRun.status === 'awaiting_input'
-                            ? 'awaiting'
-                            : activeRun.status === 'running'
-                              ? 'running'
-                              : activeRun.status === 'failed'
-                                ? 'failed'
-                                : ''
-                        }`}
-                      >
-                        <span className="kb-pulse" />
-                        {STATUS_LABEL[activeRun.status]} · run #{activeRun.id}
-                      </span>
-                    ) : null}
-                    {tagFromLabels(issue.labels, issue.isPullRequest) ? (
-                      <span
-                        className={`kb-tag kb-tag-${tagFromLabels(issue.labels, issue.isPullRequest)}`}
-                      >
-                        {tagFromLabels(issue.labels, issue.isPullRequest)}
-                      </span>
-                    ) : null}
-                    {areaLabels(issue.labels).map((l) => (
-                      <span key={l} className="kb-chip mono">
-                        {l}
-                      </span>
-                    ))}
-                    {priorityFromLabels(issue.labels) ? (
-                      <span className="kb-chip mono">
-                        priority:{priorityFromLabels(issue.labels)}
-                      </span>
-                    ) : null}
-                    {displayRun?.branchName ? (
-                      <span className="kb-chip mono">
-                        <span className="k">branch</span>
-                        {displayRun.branchName}
-                      </span>
-                    ) : null}
-                    <span className="kb-chip mono">
-                      <span className="k">opened</span>
-                      {ageString(issue.createdAt)} ago
-                    </span>
-                  </div>
-                </div>
+  const tag = issue ? tagFromLabels(issue.labels, issue.isPullRequest) : null;
+  const priority = issue ? priorityFromLabels(issue.labels) : null;
 
-                <div className="kb-tdm-tabs">
-                  {visibleTabs.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`kb-tdm-tab${tab === t ? ' active' : ''}`}
-                      onClick={() => setTab(t)}
-                    >
-                      {TAB_LABELS[t]}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="kb-tdm-content">
-                  {tab === 'autopilot' ? <AutopilotTab issueNumber={issue.number} /> : null}
-                  {tab === 'overview' ? (
-                    <OverviewTab
-                      issue={issue}
-                      displayRun={displayRun}
-                      cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
-                      {...(onOpenDetail ? { onOpenDetail } : {})}
-                    />
-                  ) : null}
-                  {tab === 'thread' && !isAutopilot ? (
-                    <ThreadTab
-                      activeRun={activeRun}
-                      displayRun={displayRun}
-                      cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
-                      runs={data?.thread?.runs}
-                      messages={messages}
-                      issueNumber={issueNumber}
-                      issueLabels={issue.labels}
-                      issueStatus={issue.status}
-                      onActionDone={() => void refetch()}
-                    />
-                  ) : null}
-                  {tab === 'diff' && !isAutopilot ? <DiffTabModal activeRun={displayRun} /> : null}
-                  {tab === 'preview' && !isAutopilot ? (
-                    <PreviewTabModal activeRun={displayRun} />
-                  ) : null}
-                  {tab === 'runs' && !isAutopilot ? (
-                    <RunsTab
-                      issueNumber={issue.number}
-                      refreshKey={runsRefreshKey}
-                      onViewRun={(run) => {
-                        setViewedRunId(run.id);
-                        setViewedRunDetails(run);
-                        setTab('thread');
-                      }}
-                    />
-                  ) : null}
-                </div>
-              </>
-            ) : error ? (
-              <div className="kb-tdm-content" style={{ color: 'var(--failed)' }}>
-                {error.message}
-              </div>
-            ) : (
-              <div className="kb-tdm-content">Loading…</div>
-            )}
-          </main>
-
-          <aside className="kb-modal-aside">
-            {issue ? <Aside issue={issue} activeRun={activeRun} latestRun={latestRun} /> : null}
-          </aside>
-        </div>
-
-        <div className="kb-modal-foot">
+  return (
+    <ModalFrame
+      title={
+        <>
+          <Box
+            component="span"
+            sx={{ color: 'text.secondary', fontFamily: 'var(--ff-mono, monospace)', mr: 1 }}
+          >
+            #{issueNumber}
+          </Box>
+          {issue?.title ?? (loading ? 'Loading…' : 'Issue')}
+        </>
+      }
+      ariaLabel={`Task #${issueNumber}`}
+      onClose={onClose}
+      width={1180}
+      fillBody
+      headerExtra={headerActions}
+      footer={
+        <Box
+          className="kb-app kb-modal-foot"
+          sx={{ width: '100%', border: 0, p: 0, bgcolor: 'transparent' }}
+        >
           <span className="hint">Reply to agent</span>
           <ReplyFooter
             issueNumber={issueNumber}
@@ -491,9 +373,155 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
             activeRun={activeRun}
             onSent={() => void refetch()}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      }
+    >
+      <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        {forkError || stopError ? (
+          <Alert severity="error" sx={{ m: 2, mb: 0 }} role="alert">
+            {forkError ?? stopError}
+          </Alert>
+        ) : null}
+        {issue ? (
+          <>
+            <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+              <ParentBreadcrumb
+                childNumber={issue.number}
+                {...(onOpenDetail ? { onOpenDetail } : {})}
+              />
+              <Stack direction="row" spacing={1.25} sx={{ alignItems: 'baseline', mb: 1.5 }}>
+                <Typography
+                  variant="h4"
+                  color="text.secondary"
+                  sx={{ fontFamily: 'var(--ff-mono, monospace)' }}
+                >
+                  #{issue.number}
+                </Typography>
+                <Typography variant="h3" component="h1" sx={{ wordBreak: 'break-word' }}>
+                  {issue.title}
+                </Typography>
+              </Stack>
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{ flexWrap: 'wrap', rowGap: 0.75, alignItems: 'center' }}
+              >
+                {activeRun ? (
+                  <Chip
+                    size="small"
+                    variant="light"
+                    color={runStatusColor(activeRun.status)}
+                    label={`${STATUS_LABEL[activeRun.status]} · run #${activeRun.id}`}
+                  />
+                ) : null}
+                {tag ? (
+                  <Chip size="small" variant="outlined" color={tagColor(tag)} label={tag} />
+                ) : null}
+                {areaLabels(issue.labels).map((l) => (
+                  <Chip key={l} size="small" variant="outlined" label={l} sx={monoChipSx} />
+                ))}
+                {priority ? (
+                  <Chip
+                    size="small"
+                    variant="light"
+                    color={priorityColor(priority)}
+                    label={`priority:${priority}`}
+                    sx={monoChipSx}
+                  />
+                ) : null}
+                {displayRun?.branchName ? (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`branch ${displayRun.branchName}`}
+                    sx={monoChipSx}
+                  />
+                ) : null}
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`opened ${ageString(issue.createdAt)} ago`}
+                  sx={monoChipSx}
+                />
+              </Stack>
+            </Box>
+
+            <Tabs
+              value={tab}
+              onChange={(_e, next: DetailTab) => setTab(next)}
+              sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
+            >
+              {visibleTabs.map((t) => (
+                <Tab key={t} value={t} label={TAB_LABELS[t]} />
+              ))}
+            </Tabs>
+
+            <div className="kb-tdm-content">
+              {tab === 'autopilot' ? <AutopilotTab issueNumber={issue.number} /> : null}
+              {tab === 'overview' ? (
+                <OverviewTab
+                  issue={issue}
+                  displayRun={displayRun}
+                  cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
+                  {...(onOpenDetail ? { onOpenDetail } : {})}
+                />
+              ) : null}
+              {tab === 'thread' && !isAutopilot ? (
+                <ThreadTab
+                  activeRun={activeRun}
+                  displayRun={displayRun}
+                  cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
+                  runs={data?.thread?.runs}
+                  messages={messages}
+                  issueNumber={issueNumber}
+                  issueLabels={issue.labels}
+                  issueStatus={issue.status}
+                  onActionDone={() => void refetch()}
+                />
+              ) : null}
+              {tab === 'diff' && !isAutopilot ? <DiffTabModal activeRun={displayRun} /> : null}
+              {tab === 'preview' && !isAutopilot ? (
+                <PreviewTabModal activeRun={displayRun} />
+              ) : null}
+              {tab === 'runs' && !isAutopilot ? (
+                <RunsTab
+                  issueNumber={issue.number}
+                  refreshKey={runsRefreshKey}
+                  onViewRun={(run) => {
+                    setViewedRunId(run.id);
+                    setViewedRunDetails(run);
+                    setTab('thread');
+                  }}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : error ? (
+          <Alert severity="error" sx={{ m: 3 }}>
+            {error.message}
+          </Alert>
+        ) : (
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', p: 3 }}>
+            <CircularProgress size={18} />
+            <Typography color="text.secondary">Loading…</Typography>
+          </Stack>
+        )}
+      </Box>
+
+      <Box
+        component="aside"
+        sx={{
+          width: 320,
+          flexShrink: 0,
+          overflowY: 'auto',
+          borderLeft: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.default',
+        }}
+      >
+        {issue ? <Aside issue={issue} activeRun={activeRun} latestRun={latestRun} /> : null}
+      </Box>
+    </ModalFrame>
   );
 }
 
@@ -889,6 +917,52 @@ function ReplyFooter({
   );
 }
 
+function AsideSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="div"
+        sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, mb: 1.25 }}
+      >
+        {title}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+function AsideRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{ justifyContent: 'space-between', py: 0.5, minWidth: 0 }}
+    >
+      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Typography
+        variant="body2"
+        noWrap
+        sx={{ minWidth: 0, textAlign: 'right', ...(mono && monoChipSx) }}
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </Typography>
+    </Stack>
+  );
+}
+
 function Aside({
   issue,
   activeRun,
@@ -903,74 +977,42 @@ function Aside({
   const sidebarHeader = activeRun ? 'Live run' : latestRun ? 'Last run' : 'Run';
   return (
     <>
-      <div className="kb-mas-block">
-        <div className="kb-mas-h">{sidebarHeader}</div>
+      <AsideSection title={sidebarHeader}>
         {sidebarRun ? (
           <RunSummary run={sidebarRun} layout="aside" />
         ) : (
-          <div className="kb-desc-md" style={{ color: 'var(--ink-3)', fontSize: 12 }}>
+          <Typography variant="body2" color="text.secondary">
             No agent runs yet.
-          </div>
+          </Typography>
         )}
-      </div>
+      </AsideSection>
 
-      <div className="kb-mas-block">
-        <div className="kb-mas-h">Properties</div>
-        <div className="kb-mas-row">
-          <span className="k">Status</span>
-          <span className="v">{issue.status ?? 'inbox'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Assignee</span>
-          <span className="v">{issue.assignees[0] ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Priority</span>
-          <span className="v">{priorityFromLabels(issue.labels) ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Folder</span>
-          <span className="v mono">current</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Worktree</span>
-          <span className="v mono">{sidebarRun?.worktreePath ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Branch</span>
-          <span className="v mono">{sidebarRun?.branchName ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Base</span>
-          <span className="v mono">{sidebarRun?.baseBranch ?? '—'}</span>
-        </div>
-      </div>
+      <AsideSection title="Properties">
+        <AsideRow label="Status" value={issue.status ?? 'inbox'} />
+        <AsideRow label="Assignee" value={issue.assignees[0] ?? '—'} />
+        <AsideRow label="Priority" value={priorityFromLabels(issue.labels) ?? '—'} />
+        <AsideRow label="Folder" value="current" mono />
+        <AsideRow label="Worktree" value={sidebarRun?.worktreePath ?? '—'} mono />
+        <AsideRow label="Branch" value={sidebarRun?.branchName ?? '—'} mono />
+        <AsideRow label="Base" value={sidebarRun?.baseBranch ?? '—'} mono />
+      </AsideSection>
 
       {links.length > 0 ? (
-        <div className="kb-mas-block">
-          <div className="kb-mas-h">Linked</div>
+        <AsideSection title="Linked">
           <LinkedIssues numbers={links} currentNumber={issue.number} />
-        </div>
+        </AsideSection>
       ) : null}
 
-      <div className="kb-mas-block">
-        <div className="kb-mas-h">Author</div>
-        <div className="kb-mas-row">
-          <span
-            className="kb-rail-avatar"
-            style={{
-              width: 22,
-              height: 22,
-              fontSize: 10,
-              background: colorForLogin(issue.user.login),
-            }}
-            aria-hidden
+      <AsideSection title="Author">
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Avatar
+            sx={{ width: 24, height: 24, fontSize: 11, bgcolor: colorForLogin(issue.user.login) }}
           >
             {issue.user.login.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="v">{issue.user.login}</span>
-        </div>
-      </div>
+          </Avatar>
+          <Typography variant="body2">{issue.user.login}</Typography>
+        </Stack>
+      </AsideSection>
     </>
   );
 }
@@ -984,55 +1026,43 @@ function LinkedIssues({
 }) {
   const { issues } = useIssues();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <Stack spacing={0.75}>
       {numbers
         .filter((n) => String(n) !== String(currentNumber))
         .map((n) => {
           const linked = issues.find((i) => String(i.number) === String(n));
           return (
-            <a
+            <Box
               key={String(n)}
+              component="a"
               href={`#/issue/${n}`}
-              style={{
+              sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-                padding: '6px 8px',
-                borderRadius: 6,
-                background: 'var(--bg-2)',
-                border: '1px solid var(--hairline-soft)',
-                textDecoration: 'none',
+                gap: 1,
+                px: 1,
+                py: 0.75,
+                borderRadius: 1,
+                border: 1,
+                borderColor: 'divider',
                 color: 'inherit',
+                textDecoration: 'none',
+                '&:hover': { borderColor: 'primary.main' },
               }}
             >
-              <span
-                style={{
-                  fontFamily: 'var(--ff-mono)',
-                  fontSize: 11,
-                  color: 'var(--ink-3)',
-                }}
-              >
+              <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
                 #{n}
-              </span>
-              <span
-                style={{
-                  flex: 1,
-                  color: 'var(--ink-1)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              </Typography>
+              <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
                 {linked?.title ?? '(not loaded)'}
-              </span>
+              </Typography>
               {linked?.state === 'closed' ? (
-                <span style={{ color: 'var(--review)', fontSize: 10 }}>closed</span>
+                <Chip size="small" variant="light" color="info" label="closed" />
               ) : null}
-            </a>
+            </Box>
           );
         })}
-    </div>
+    </Stack>
   );
 }
 
@@ -1074,22 +1104,27 @@ function ParentBreadcrumb({
   if (loading || parents.length === 0) return null;
 
   return (
-    <div className="kb-sub-issues-parent">
+    <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
       {parents.map((p) => (
-        <button
+        <Button
           key={p.id}
-          type="button"
-          className="kb-sub-issues-parent-link"
+          size="small"
+          color="secondary"
           onClick={() => onOpenDetail?.(p.child.number)}
           disabled={!onOpenDetail}
           title={`Open parent #${p.child.number}`}
+          sx={{ px: 1, minWidth: 0, textTransform: 'none' }}
         >
-          <span className="kb-sub-issues-parent-label">Parent</span>
-          <span className="kb-sub-issues-parent-num">#{p.child.number}</span>
-          <span className="kb-sub-issues-parent-title">{p.child.title}</span>
-        </button>
+          <Box component="span" sx={{ color: 'text.secondary', mr: 0.75 }}>
+            Parent
+          </Box>
+          <Box component="span" sx={{ ...monoChipSx, mr: 0.75 }}>
+            #{p.child.number}
+          </Box>
+          {p.child.title}
+        </Button>
       ))}
-    </div>
+    </Stack>
   );
 }
 

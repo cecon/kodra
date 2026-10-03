@@ -930,19 +930,6 @@
   text-overflow: ellipsis;
 }
 
-.kb-rail-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 11px;
-  color: oklch(0.18 0.02 60);
-  flex-shrink: 0;
-}
-
 /* ---------- Activity section ---------- */
 .kb-rail-activity {
   flex: 0 0 auto;

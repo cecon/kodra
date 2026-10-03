@@ -335,53 +335,6 @@
 }
 
 /* ---- Task Detail hero ---- */
-.kb-tdm-hero {
-  padding: 22px 26px 18px;
-  border-bottom: 1px solid var(--hairline);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--bg) 86%, var(--accent-soft)),
-    var(--bg)
-  );
-  position: relative;
-}
-.kb-tdm-hero.running::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--running);
-  box-shadow: 0 0 18px var(--running);
-}
-.kb-tdm-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.kb-tdm-num {
-  font-family: var(--ff-mono);
-  color: var(--ink-3);
-  font-size: 14px;
-  padding-top: 4px;
-}
-.kb-tdm-h1 {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.018em;
-  line-height: 1.22;
-  margin: 0;
-  color: var(--ink);
-  text-wrap: balance;
-}
-.kb-tdm-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-  align-items: center;
-}
 
 /* ---- Task Detail tabs ---- */
 .kb-tdm-tabs {
@@ -535,30 +488,6 @@
   font-weight: 600;
   color: var(--ink-3);
   margin-bottom: 10px;
-}
-.kb-mas-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--ink-1);
-  padding: 4px 0;
-}
-.kb-mas-row .k {
-  color: var(--ink-3);
-  width: 78px;
-  flex-shrink: 0;
-  font-size: 11px;
-}
-.kb-mas-row .v {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kb-mas-row .v.mono {
-  font-family: var(--ff-mono);
-  font-size: 11px;
 }
 
 /* Check pill (Phase 11 wires real status) */
@@ -3566,53 +3495,6 @@
 /* Sub-issue parent breadcrumb shown above the title hero. Renders as
    a compact pill button so the user can jump back to the parent issue
    without leaving the modal stack. */
-.kb-sub-issues-parent {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-.kb-sub-issues-parent-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--hairline-soft);
-  border-radius: 999px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-  cursor: pointer;
-  max-width: 360px;
-  overflow: hidden;
-}
-.kb-sub-issues-parent-link:hover {
-  background: var(--bg-3, var(--bg-2));
-  border-color: var(--hairline);
-  color: var(--ink-1);
-}
-.kb-sub-issues-parent-link:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-.kb-sub-issues-parent-label {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.kb-sub-issues-parent-num {
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.kb-sub-issues-parent-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink-1);
-}
 
 /* Sub-issues section inside the Overview tab. The layout follows the
    same column rhythm as the description / spec sections so the eye

@@ -21,6 +21,8 @@ export interface ModalFrameProps {
   footerHint?: ReactNode;
   /** Footer buttons, right-aligned. Omit both footer props for no footer. */
   actions?: ReactNode;
+  /** A full-width custom footer, used instead of `footerHint` / `actions`. */
+  footer?: ReactNode;
   /**
    * Classes for the body wrapper. Bodies that still use the legacy CSS keep
    * their own class (e.g. `kb-sentry-body`) until they are migrated too.
@@ -48,6 +50,7 @@ export function ModalFrame({
   headerExtra,
   footerHint,
   actions,
+  footer,
   bodyClassName,
   fillBody = false,
   escapeCloses = true,
@@ -102,7 +105,9 @@ export function ModalFrame({
           {children}
         </Box>
       </DialogContent>
-      {hasFooter ? (
+      {footer !== undefined ? (
+        <DialogActions sx={{ px: 3, py: 1.5, display: 'block' }}>{footer}</DialogActions>
+      ) : hasFooter ? (
         <DialogActions sx={{ px: 3, py: 1.75, gap: 1 }}>
           {footerHint !== undefined ? (
             <Typography
