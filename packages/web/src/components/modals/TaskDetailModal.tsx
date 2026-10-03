@@ -2487,90 +2487,112 @@ function DiffTabModal({ activeRun }: { activeRun: AgentRun | null }) {
     };
   }, [activeRun?.id]);
 
-  if (!activeRun) {
+  if (!activeRun || loading || error || !data || data.empty) {
     return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-          No active run for this issue.
-        </div>
-      </div>
-    );
-  }
-  if (loading) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md">Loading…</div>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--failed)' }}>
-          {error}
-        </div>
-      </div>
-    );
-  }
-  if (!data || data.empty) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-          No changes vs. base.
-        </div>
-      </div>
+      <TabSection title="Diff">
+        {error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {!activeRun
+              ? 'No active run for this issue.'
+              : loading
+                ? 'Loading…'
+                : 'No changes vs. base.'}
+          </Typography>
+        )}
+      </TabSection>
     );
   }
   return (
-    <div className="kb-tdm-section">
-      <h3>
-        Diff vs {data.base} · {data.files.length} file{data.files.length === 1 ? '' : 's'}
-      </h3>
-      <div className="kb-diff-block">
-        <div className="kb-diff-head">
-          <span className="branch">{data.branch ?? 'HEAD'}</span>
-          <span className="arrow">←</span>
-          <span className="branch" style={{ color: 'var(--ink-3)' }}>
-            {data.base}
-          </span>
-          <span className="stat">{data.files.length}</span>
-        </div>
+    <TabSection
+      title={`Diff vs ${data.base} · ${data.files.length} file${data.files.length === 1 ? '' : 's'}`}
+      action={
+        <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
+          {data.branch ?? 'HEAD'} ← {data.base}
+        </Typography>
+      }
+    >
+      <Stack spacing={1.5}>
         {data.files.map((f) => (
           <DiffFileBlockModal key={f.path} file={f} />
         ))}
-      </div>
-    </div>
+      </Stack>
+    </TabSection>
   );
 }
 
+const DIFF_STATUS_COLOR: Record<
+  DiffFile['status'],
+  'success' | 'error' | 'warning' | 'info' | 'secondary'
+> = {
+  added: 'success',
+  untracked: 'success',
+  deleted: 'error',
+  modified: 'warning',
+  renamed: 'info',
+  other: 'secondary',
+};
+
 function DiffFileBlockModal({ file }: { file: DiffFile }) {
   return (
-    <div className="kb-diff-file">
-      <div className="kb-diff-fhead">
-        <span className={`stat-tag ${file.status}`}>{file.status}</span>
-        <span className="path">{file.path}</span>
-      </div>
-      <div className="kb-diff-hunk">
+    <Box sx={{ borderRadius: 1, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Chip
+          size="small"
+          variant="light"
+          color={DIFF_STATUS_COLOR[file.status]}
+          label={file.status}
+        />
+        <Typography variant="body2" noWrap sx={{ ...monoChipSx, minWidth: 0 }}>
+          {file.path}
+        </Typography>
+      </Stack>
+      <Box
+        component="pre"
+        sx={{ m: 0, py: 1, overflowX: 'auto', fontSize: 12, lineHeight: 1.55, ...monoChipSx }}
+      >
         {file.patch.split('\n').map((line, idx) => {
-          let cls = '';
-          if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ')) {
-            cls = '';
-          } else if (line.startsWith('@@')) cls = 'hunk';
-          else if (line.startsWith('+')) cls = 'add';
-          else if (line.startsWith('-')) cls = 'del';
+          const kind =
+            line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ')
+              ? 'meta'
+              : line.startsWith('@@')
+                ? 'hunk'
+                : line.startsWith('+')
+                  ? 'add'
+                  : line.startsWith('-')
+                    ? 'del'
+                    : 'ctx';
           return (
-            <span key={idx} className={`kb-diff-line ${cls}`}>
+            <Box
+              key={idx}
+              component="span"
+              sx={(t) => ({
+                display: 'block',
+                px: 1.5,
+                whiteSpace: 'pre',
+                ...(kind === 'add' && {
+                  bgcolor: alpha(t.palette.success.main, 0.12),
+                  color: t.palette.success.main,
+                }),
+                ...(kind === 'del' && {
+                  bgcolor: alpha(t.palette.error.main, 0.12),
+                  color: t.palette.error.main,
+                }),
+                ...(kind === 'hunk' && { color: t.palette.info.main }),
+                ...(kind === 'meta' && { color: t.palette.text.secondary }),
+              })}
+            >
               {line || ' '}
-              {'\n'}
-            </span>
+            </Box>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -2587,8 +2609,7 @@ function PreviewTabModal({ activeRun }: { activeRun: AgentRun | null }) {
     window.dispatchEvent(new CustomEvent('kanbots:composer:insert', { detail: { text: block } }));
   }
   return (
-    <div className="kb-tdm-section">
-      <h3>Branch preview · live dev server on this worktree</h3>
+    <TabSection title="Branch preview · live dev server on this worktree">
       <PreviewPanel
         branch={activeRun?.branchName ?? null}
         worktreePath={activeRun?.worktreePath ?? null}
@@ -2596,7 +2617,7 @@ function PreviewTabModal({ activeRun }: { activeRun: AgentRun | null }) {
         size="tall"
         onInspectSelect={handleInspectSelect}
       />
-    </div>
+    </TabSection>
   );
 }
 
