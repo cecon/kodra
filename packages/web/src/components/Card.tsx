@@ -15,12 +15,13 @@ import DialogTitle from '@mui/material/DialogTitle';
 import LinearProgress from '@mui/material/LinearProgress';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { IconButton, IconsaxIcon } from '@kanbots/ui';
-import { Hierarchy, MessageQuestion, More, Trash } from 'iconsax-react';
+import { Hierarchy, MessageQuestion, More, StopCircle, Trash } from 'iconsax-react';
 import { api } from '../api.js';
 import { useFocusedRepo } from '../hooks/useFocusedRepo.js';
 import { dispatchIssuesRefetch } from '../hooks/useIssues.js';
@@ -34,6 +35,17 @@ import {
 } from '../labels.js';
 import type { Issue, IssueActiveRun, ShipStatus } from '../types.js';
 import { agentColor, agentLabel, priorityColor, tagColor } from './board/boardStyle.js';
+
+/** The card's run while an agent is still working on it (or waiting on
+ *  the user), else null. Such a card can't change columns until the run
+ *  ends or is stopped. */
+export function liveRunOf(issue: Issue): IssueActiveRun | null {
+  const run = issue.activeRun ?? null;
+  if (!run) return null;
+  return run.status === 'starting' || run.status === 'running' || run.status === 'awaiting_input'
+    ? run
+    : null;
+}
 
 export function cardDragId(issueNumber: IssueRef): string {
   return `card:${issueNumber}`;
@@ -81,8 +93,11 @@ function CardBody({
 }) {
   const tag = tagFromLabels(issue.labels, issue.isPullRequest);
   const priority = priorityFromLabels(issue.labels);
-  const stateColor = agentColor(issue.agent);
-  const stateLabel = agentLabel(issue.agent);
+  // Every open card says whether an agent is on it; "Idle" means none is
+  // working on it right now (never started, finished or stopped).
+  const idle = issue.status !== 'done' && agentLabel(issue.agent) === null;
+  const stateColor = idle ? 'secondary' : agentColor(issue.agent);
+  const stateLabel = idle ? 'Idle' : agentLabel(issue.agent);
   const active: IssueActiveRun | null = issue.activeRun ?? null;
   const branch = strippedBranch(active?.branch);
   const isRunning = issue.agent === 'running';
@@ -702,8 +717,9 @@ function CheckPill({ kind, label }: { kind: 'pass' | 'fail' | 'running' | 'idle'
 }
 
 /**
- * "⋯" menu in the card's top-right corner. Delete archives the card and
- * removes the worktrees its runs created, after a confirmation.
+ * "⋯" menu in the card's top-right corner. Stop agent ends a live run;
+ * Delete archives the card and removes the worktrees its runs created,
+ * after a confirmation.
  *
  * The menu and dialog render in portals, but React still bubbles their
  * events through the card, so the wrapper swallows them: otherwise a click
@@ -714,6 +730,22 @@ function CardMenu({ issue }: { issue: Issue }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+  const liveRun = liveRunOf(issue);
+
+  async function stopAgent(runId: number): Promise<void> {
+    setStopping(true);
+    setStopError(null);
+    try {
+      await api.stopAgent(runId);
+      dispatchIssuesRefetch();
+    } catch (err) {
+      setStopError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStopping(false);
+    }
+  }
 
   async function remove(): Promise<void> {
     setBusy(true);
@@ -752,6 +784,19 @@ function CardMenu({ issue }: { issue: Issue }) {
         <IconsaxIcon icon={More} size={16} />
       </IconButton>
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        {liveRun ? (
+          <MenuItem
+            disabled={stopping}
+            onClick={() => {
+              setAnchor(null);
+              void stopAgent(liveRun.id);
+            }}
+            sx={{ gap: 1 }}
+          >
+            <IconsaxIcon icon={StopCircle} size={16} />
+            {stopping ? 'Stopping…' : 'Stop agent'}
+          </MenuItem>
+        ) : null}
         <MenuItem
           onClick={() => {
             setAnchor(null);
@@ -763,6 +808,16 @@ function CardMenu({ issue }: { issue: Issue }) {
           Delete
         </MenuItem>
       </Menu>
+      <Snackbar
+        open={stopError !== null}
+        autoHideDuration={6000}
+        onClose={() => setStopError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="error" onClose={() => setStopError(null)}>
+          Couldn't stop #{issue.number}: {stopError}
+        </Alert>
+      </Snackbar>
       <Dialog
         open={confirmOpen}
         onClose={() => !busy && setConfirmOpen(false)}

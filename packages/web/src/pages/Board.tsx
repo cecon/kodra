@@ -31,7 +31,7 @@ import { BoardFilters } from '../components/board/BoardFilters.js';
 import { BoardToolbar } from '../components/board/BoardToolbar.js';
 import { AgentUsageRow } from '../components/board/AgentUsageRow.js';
 import { BulkActionBar, type BulkStatusTarget } from '../components/board/BulkActionBar.js';
-import { CardPreview, type CardSelectModifiers } from '../components/Card.js';
+import { CardPreview, liveRunOf, type CardSelectModifiers } from '../components/Card.js';
 import { Column, type SuggestActivity } from '../components/Column.js';
 import { PersonaPickerModal } from '../components/modals/PersonaPickerModal.js';
 import { useBoardAgentStreams } from '../hooks/useBoardAgentStreams.js';
@@ -420,6 +420,14 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     const current = list.find((i) => String(i.number) === String(issueNumber));
     if (!current) return;
     if (current.status === targetStatus) return;
+    // A live agent owns its worktree; moving the card (to Done above all,
+    // which removes worktrees) has to wait until the run ends or is stopped.
+    if (liveRunOf(current) !== null) {
+      setMoveError(
+        `#${issueNumber} has an agent working on it. Stop it first (⋯ → Stop agent) or wait for it to finish.`,
+      );
+      return;
+    }
 
     const fromStatus = current.status;
     const nextLabels = withStatus(current.labels, targetStatus);

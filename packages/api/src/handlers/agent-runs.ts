@@ -312,6 +312,12 @@ export async function sweepMergedRunsForThread(
   return { swept };
 }
 
+const LIVE_RUN_STATUSES: ReadonlySet<AgentRun['status']> = new Set([
+  'starting',
+  'running',
+  'awaiting_input',
+]);
+
 // Aggressive thread-level cleanup invoked when the user explicitly marks a card
 // complete. Always force-removes worktrees so the file system goes back to a
 // clean state — but for runs whose branch has unmerged commits, it preserves
@@ -338,6 +344,10 @@ export async function sweepAllRunsForThread(
   let branchesKept = 0;
   for (const run of runs) {
     if (!run.worktreePath) continue;
+    // Never pull a worktree out from under an agent that is still working
+    // in it: the card can reach Done while a run is live (a stale drag, or
+    // a status change from elsewhere). Stop the run first.
+    if (LIVE_RUN_STATUSES.has(run.status)) continue;
     let keepBranch = true;
     if (base !== null && run.branchName) {
       try {
