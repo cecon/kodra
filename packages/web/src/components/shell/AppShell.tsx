@@ -3,6 +3,8 @@ import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Chip from '@mui/material/Chip';
 import MuiAvatar from '@mui/material/Avatar';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -20,6 +22,7 @@ import {
 import type { IssueRef } from '@kanbots/core';
 import {
   Archive,
+  ArrowDown2,
   Book1,
   Chart2,
   Cloud,
@@ -275,21 +278,48 @@ function HeaderContent({
   onOpenPalette: () => void;
 }) {
   const bridge = getBridge();
+  const [repoMenu, setRepoMenu] = useState<HTMLElement | null>(null);
+
+  function switchRepository(): void {
+    setRepoMenu(null);
+    if (!bridge) return;
+    if (
+      !window.confirm(
+        `Close ${folderName} and pick another repository? Agents still running here may be interrupted.`,
+      )
+    ) {
+      return;
+    }
+    // Closing the workspace reloads the window onto the folder picker.
+    void bridge.closeWorkspace();
+  }
 
   return (
     <>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0, ml: 1 }}>
-        <IconsaxIcon icon={Element3} size={18} variant="Bulk" />
-        <Typography variant="h5" noWrap>
-          {folderName}
-        </Typography>
-        <Chip
-          label={branch}
-          size="small"
-          variant="outlined"
-          sx={{ fontFamily: 'monospace', height: 22 }}
-        />
-      </Stack>
+      <Tooltip title="Switch repository">
+        <ButtonBase
+          onClick={(e) => setRepoMenu(e.currentTarget)}
+          aria-haspopup="menu"
+          sx={{ ml: 1, px: 1, py: 0.5, borderRadius: 1, minWidth: 0, gap: 1 }}
+        >
+          <IconsaxIcon icon={Element3} size={18} variant="Bulk" />
+          <Typography variant="h5" noWrap>
+            {folderName}
+          </Typography>
+          <Chip
+            label={branch}
+            size="small"
+            variant="outlined"
+            sx={{ fontFamily: 'monospace', height: 22 }}
+          />
+          <IconsaxIcon icon={ArrowDown2} size={14} />
+        </ButtonBase>
+      </Tooltip>
+      <Menu anchorEl={repoMenu} open={repoMenu !== null} onClose={() => setRepoMenu(null)}>
+        <MenuItem onClick={switchRepository} disabled={!bridge}>
+          Switch repository…
+        </MenuItem>
+      </Menu>
 
       <ButtonBase
         onClick={onOpenPalette}
