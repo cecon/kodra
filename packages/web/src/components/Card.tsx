@@ -29,6 +29,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { IconButton, IconsaxIcon } from '@kanbots/ui';
 import {
+  Archive,
   ArrowRotateLeft,
   Hierarchy,
   MessageQuestion,
@@ -1157,6 +1158,20 @@ function CardMenu({ issue }: { issue: Issue }) {
           >
             <IconsaxIcon icon={Refresh} size={16} />
             Re-run checks
+          </MenuItem>
+        ) : null}
+        {issue.status === 'done' ? (
+          <MenuItem
+            disabled={pending !== null}
+            onClick={() =>
+              void perform('Archiving…', "Couldn't archive the card", () =>
+                api.archiveIssue(issue.number),
+              )
+            }
+            sx={{ gap: 1 }}
+          >
+            <IconsaxIcon icon={Archive} size={16} />
+            Archive
           </MenuItem>
         ) : null}
         <MenuItem
