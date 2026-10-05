@@ -60,6 +60,7 @@ export interface StartPreviewOptions {
 
 const DEFAULT_DETECT_MS = 60_000;
 const DEFAULT_PORT = 3041;
+const IS_WINDOWS = process.platform === 'win32';
 
 async function isPortFree(port: number): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
@@ -103,7 +104,8 @@ export async function startPreview(opts: StartPreviewOptions): Promise<PreviewHa
     ? spawn(opts.startCommandLine, [], { cwd: opts.cwd, env, shell: true } as PreviewSpawnOptions)
     : (() => {
         const cmd = opts.startCommand ?? ['pnpm', 'dev'];
-        return spawn(cmd[0]!, cmd.slice(1), { cwd: opts.cwd, env });
+        // pnpm/npm are .cmd shims on Windows: only a shell resolves them.
+        return spawn(cmd[0]!, cmd.slice(1), { cwd: opts.cwd, env, shell: IS_WINDOWS });
       })();
   const pid = child.pid ?? -1;
   const stateRef: { current: PreviewState } = { current: 'booting' };
@@ -127,6 +129,13 @@ export async function startPreview(opts: StartPreviewOptions): Promise<PreviewHa
     });
     child.on('exit', () => {
       if (stateRef.current !== 'live') stateRef.current = 'crashed';
+      clearTimeout(timer);
+      resolve();
+    });
+    // A command that can't be spawned (e.g. ENOENT) emits 'error', which
+    // would otherwise go unhandled and take the main process down.
+    child.on('error', () => {
+      stateRef.current = 'crashed';
       clearTimeout(timer);
       resolve();
     });
@@ -159,7 +168,15 @@ export async function startPreview(opts: StartPreviewOptions): Promise<PreviewHa
     state: stateRef.current,
     async stop() {
       try {
-        child.kill('SIGTERM');
+        if (IS_WINDOWS && typeof child.pid === 'number') {
+          // With a shell in between, killing the child only ends cmd.exe;
+          // /T takes the dev server it started down with it.
+          nodeSpawn('taskkill', ['/pid', String(child.pid), '/T', '/F']).on('error', () => {
+            // best-effort
+          });
+        } else {
+          child.kill('SIGTERM');
+        }
       } catch {
         // ignore
       }

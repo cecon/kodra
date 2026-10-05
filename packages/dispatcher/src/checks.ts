@@ -20,7 +20,11 @@ export interface RunCheckOptions {
   cwd: string;
   command: CheckCommand;
   timeoutMs?: number;
-  spawn?: (command: string, args: readonly string[], options: { cwd: string }) => ChildProcess;
+  spawn?: (
+    command: string,
+    args: readonly string[],
+    options: { cwd: string; shell?: boolean },
+  ) => ChildProcess;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
@@ -56,7 +60,12 @@ export async function runCheck(opts: RunCheckOptions): Promise<CheckResult> {
   const spawn = opts.spawn ?? nodeSpawn;
   const start = Date.now();
   return await new Promise<CheckResult>((resolve) => {
-    const child = spawn(opts.command.command, opts.command.args, { cwd: opts.cwd });
+    // Windows ships package managers as .cmd shims (pnpm.cmd, npm.cmd) that
+    // only a shell resolves; spawning `pnpm` directly fails with ENOENT.
+    const child = spawn(opts.command.command, opts.command.args, {
+      cwd: opts.cwd,
+      shell: process.platform === 'win32',
+    });
     let stdout = '';
     let stderr = '';
     let killed = false;
