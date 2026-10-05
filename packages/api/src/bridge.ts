@@ -124,6 +124,17 @@ export interface DraftedIssue {
 
 export type DraftIssueFn = (input: DraftIssueInput) => Promise<DraftedIssue>;
 
+/** Inline AI help on one field of the new-task form (see `composer:assist`). */
+export type FieldAssistMode = 'improve-description' | 'suggest-title';
+
+export interface AssistFieldInput {
+  mode: FieldAssistMode;
+  title: string;
+  description: string;
+}
+
+export type AssistFieldFn = (input: AssistFieldInput) => Promise<DraftedIssue>;
+
 /**
  * Input handed to the runtime `draftPrDescription` function. The diff is
  * supplied by the handler (already truncated to ~15KB before this is
@@ -1154,6 +1165,7 @@ export interface BridgeChannels {
   };
   'folders:remove': { args: { id: string }; result: { ok: boolean } };
   'composer:draft': { args: { description: string }; result: DraftedIssue };
+  'composer:assist': { args: AssistFieldInput; result: DraftedIssue };
   'composer:suggest': {
     args: { personaPrompt: string; provider?: ProviderId; userNotes?: string };
     result: DraftedIssue;

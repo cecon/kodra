@@ -46,6 +46,7 @@ import {
 import {
   createComposer,
   createPrDescriptionDrafter,
+  createFieldAssistant,
   createSentryAnalyzer,
   createSuggester,
   getAdapterMcpSupport,
@@ -824,6 +825,7 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
   // are rebuilt. Keep the desktop bridge on the API contract.
   const suggestIssue = createSuggester({ cwd: gitRoot }) as unknown as SuggestFeatureFn;
   const draftPrDescription = createPrDescriptionDrafter({ cwd: gitRoot });
+  const assistField = createFieldAssistant({ cwd: gitRoot });
   const analyzeSentryError = createSentryAnalyzer({ cwd: gitRoot });
 
   // Demote any in-progress / agent-running labels left over from a previous
@@ -943,6 +945,7 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
       draftIssue,
       suggestIssue,
       draftPrDescription,
+      assistField,
       autopilot,
       analyzeSentryError,
       sentry: sentryRuntime,

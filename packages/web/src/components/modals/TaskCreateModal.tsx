@@ -28,6 +28,39 @@ import { dispatchIssuesRefetch } from '../../hooks/useIssues.js';
 import { priorityFromLabels, tagFromLabels } from '../../labels.js';
 import type { CardTemplatePayload, Issue, ProviderId } from '../../types.js';
 import { shortcut } from '../../shortcuts.js';
+import { AiAssistButton } from '../forms/AiAssistButton.js';
+
+type AiMode = 'improve-description' | 'suggest-title';
+
+/** Line under a field after an AI assist: the error, or an undo link. */
+function AiNote({
+  mode,
+  error,
+  undo,
+  onUndo,
+}: {
+  mode: AiMode;
+  error: { mode: AiMode; message: string } | null;
+  undo: { mode: AiMode; value: string } | null;
+  onUndo: () => void;
+}) {
+  if (error?.mode === mode) {
+    return (
+      <div role="alert" style={{ fontSize: 11, color: 'var(--red, #f87171)', marginTop: 4 }}>
+        {error.message}
+      </div>
+    );
+  }
+  if (undo?.mode !== mode) return null;
+  return (
+    <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
+      Rewritten by AI ·{' '}
+      <button type="button" className="kb-link-btn" onClick={onUndo}>
+        Undo
+      </button>
+    </div>
+  );
+}
 
 type Mode = 'spec' | 'dispatch' | 'queue';
 type Tag = 'feat' | 'fix' | 'chore' | 'infra' | 'docs';
@@ -137,6 +170,11 @@ export function TaskCreateModal({
   const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<MarkdownEditorHandle | null>(null);
   const [pasting, setPasting] = useState(0);
+  // Per-field AI help. `aiUndo` keeps the value the AI replaced so the user
+  // can take it back.
+  const [aiBusy, setAiBusy] = useState<AiMode | null>(null);
+  const [aiError, setAiError] = useState<{ mode: AiMode; message: string } | null>(null);
+  const [aiUndo, setAiUndo] = useState<{ mode: AiMode; value: string } | null>(null);
   const { repos, focused, focusedRepoId } = useFocusedRepo();
   const showRepoCaption = repos.length > 1 && focused !== null;
   const [templates, setTemplates] = useState<CardTemplatePayload[]>([]);
@@ -278,6 +316,32 @@ export function TaskCreateModal({
     setTemplateId(id);
     const t = templates.find((x) => x.id === id);
     if (t) applyTemplate(t);
+  }
+
+  async function runAiAssist(mode: AiMode): Promise<void> {
+    setAiBusy(mode);
+    setAiError(null);
+    try {
+      const result = await api.assistField({ mode, title, description: body });
+      if (mode === 'suggest-title') {
+        setAiUndo({ mode, value: title });
+        setTitle(result.title);
+      } else {
+        setAiUndo({ mode, value: body });
+        setBody(result.body);
+      }
+    } catch (err) {
+      setAiError({ mode, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  function undoAiAssist(): void {
+    if (!aiUndo) return;
+    if (aiUndo.mode === 'suggest-title') setTitle(aiUndo.value);
+    else setBody(aiUndo.value);
+    setAiUndo(null);
   }
 
   const insertAtCursor = useCallback((insert: string): void => {
@@ -555,11 +619,20 @@ export function TaskCreateModal({
               ) : null}
               {/* TITLE */}
               <div className="kb-field">
-                <label className="kb-field-label">
+                <label className="kb-field-label" htmlFor="kb-task-title">
                   Title
-                  <span className="kb-field-hint">→ becomes branch + PR title</span>
+                  <span className="kb-field-hint kb-field-hint-ai">
+                    → becomes branch + PR title
+                    <AiAssistButton
+                      label="Suggest a title with AI"
+                      busy={aiBusy === 'suggest-title'}
+                      disabled={aiBusy !== null || (title.trim() === '' && body.trim() === '')}
+                      onClick={() => void runAiAssist('suggest-title')}
+                    />
+                  </span>
                 </label>
                 <input
+                  id="kb-task-title"
                   className="kb-input title-input"
                   placeholder="e.g. Replace password login with passkey-first onboarding"
                   value={title}
@@ -567,6 +640,7 @@ export function TaskCreateModal({
                   onKeyDown={onTitleKey}
                   autoFocus
                 />
+                <AiNote mode="suggest-title" error={aiError} undo={aiUndo} onUndo={undoAiAssist} />
                 {title ? (
                   <div
                     style={{
@@ -632,11 +706,20 @@ export function TaskCreateModal({
 
               {/* DESCRIPTION */}
               <div className="kb-field">
-                <label className="kb-field-label">
+                <label className="kb-field-label" htmlFor="kb-task-description">
                   Description
-                  <span className="kb-field-hint">Markdown · use AC: for acceptance criteria</span>
+                  <span className="kb-field-hint kb-field-hint-ai">
+                    Markdown · use AC: for acceptance criteria
+                    <AiAssistButton
+                      label="Improve writing with AI"
+                      busy={aiBusy === 'improve-description'}
+                      disabled={aiBusy !== null || body.trim() === ''}
+                      onClick={() => void runAiAssist('improve-description')}
+                    />
+                  </span>
                 </label>
                 <MarkdownEditor
+                  id="kb-task-description"
                   ref={bodyRef}
                   value={body}
                   onChange={setBody}
@@ -644,6 +727,12 @@ export function TaskCreateModal({
                   rows={10}
                   ariaLabel="Task description"
                   placeholder={`What is the user-facing outcome?\n\nAC:\n- A new user can register a passkey on first login\n- Existing users see a banner with passkey CTA\n\nTip: paste an image (${shortcut('mod+v')}) to attach it.`}
+                />
+                <AiNote
+                  mode="improve-description"
+                  error={aiError}
+                  undo={aiUndo}
+                  onUndo={undoAiAssist}
                 />
                 {pasting > 0 ? (
                   <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>

@@ -162,6 +162,7 @@ export function createHandlers(opts: CreateHandlersOptions): Handlers {
     'folders:add': (args) => workspace.addFolder(deps, args),
     'folders:remove': (args) => workspace.removeFolder(deps, args),
     'composer:draft': (args) => composer.draft(deps, args),
+    'composer:assist': (args) => composer.assist(deps, args),
     'composer:suggest': (args) => composer.suggest(deps, args),
     'attachments:upload': (args) => attachments.upload(deps, args),
     'autopilot:start': (args) => autopilot.start(deps, args),

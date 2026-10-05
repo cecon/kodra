@@ -443,6 +443,13 @@ export const api = {
   },
   draftIssue: (description: string): Promise<DraftedIssue> =>
     invoke('composer:draft', { description }),
+  /** Per-field AI help in the new-task form. Returns both fields; the
+   *  caller applies the one the mode is about. */
+  assistField: (input: {
+    mode: 'improve-description' | 'suggest-title';
+    title: string;
+    description: string;
+  }): Promise<DraftedIssue> => invoke('composer:assist', input),
   suggestFeature: (
     personaPrompt: string,
     provider?: ProviderId,

@@ -417,6 +417,61 @@ export function createComposer(opts: CreateComposerOptions): DraftIssueFn {
   };
 }
 
+/**
+ * Inline AI help on a single field of the new-task form. Every mode gets
+ * the whole draft (title + description) for context and returns both
+ * fields; the caller applies only the one the user asked about.
+ */
+export type FieldAssistMode = 'improve-description' | 'suggest-title';
+
+export interface AssistFieldInput {
+  mode: FieldAssistMode;
+  title: string;
+  description: string;
+}
+
+export type AssistFieldFn = (input: AssistFieldInput) => Promise<DraftedIssue>;
+
+const FIELD_ASSIST_RULES = `
+- Write in the same language the user wrote in.
+- Do not investigate the repo unless a file or symbol the user mentions needs checking; answer within a tool call or two at most.
+- Do NOT invent requirements, files or behaviour the user did not state.
+- Output strictly the JSON object matching the schema.`;
+
+const FIELD_ASSIST_PROMPTS: Record<FieldAssistMode, string> = {
+  'improve-description': `You are an editor polishing the description of a task for a coding agent.
+
+The user gives you a task title and description draft. Rewrite the description so it is clear, well organised and unambiguous: fix grammar and spelling, structure it in markdown (a short problem statement, then details, then an "AC:" list of acceptance criteria when the draft implies them), and keep every fact and constraint the user gave.
+
+Return \`body\` as the rewritten description and \`title\` as the user's title unchanged (or a short imperative title if it is empty).
+${FIELD_ASSIST_RULES}`,
+  'suggest-title': `You are naming a task for a coding agent.
+
+The user gives you a task title draft (possibly empty) and description. Write a concise, imperative title, ≤80 chars, no trailing punctuation, that captures the user-facing outcome. It becomes the branch and PR title.
+
+Return \`title\` as the new title and \`body\` as the user's description unchanged.
+${FIELD_ASSIST_RULES}`,
+};
+
+export function createFieldAssistant(opts: CreateComposerOptions): AssistFieldFn {
+  const command = opts.command ?? 'claude';
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const spawn = opts.spawn ?? nodeSpawn;
+
+  return async function assistField(input: AssistFieldInput): Promise<DraftedIssue> {
+    const title = input.title.trim() || '(empty)';
+    const description = input.description.trim() || '(empty)';
+    return runClaudeForDraftedIssue({
+      command,
+      cwd: opts.cwd,
+      timeoutMs,
+      systemPrompt: FIELD_ASSIST_PROMPTS[input.mode],
+      stdin: `### Title\n${title}\n\n### Description\n${description}`,
+      spawn,
+    });
+  };
+}
+
 const DEFAULT_PR_DESCRIPTION_SYSTEM_PROMPT = `You are a senior engineer drafting a pull-request description from a git diff.
 
 The user gives you the issue title, the issue body, and the diff. Produce a single well-structured PR description — both a concise title and a markdown body — that a reviewer can act on.

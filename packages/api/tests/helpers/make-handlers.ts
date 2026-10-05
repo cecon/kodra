@@ -40,7 +40,7 @@ export interface HandlerTestKit {
 
 export function makeHandlerTestKit(
   configOverride: Partial<Config> = {},
-  dependencyOverride: Pick<HandlerDeps, 'memory'> = {},
+  dependencyOverride: Pick<HandlerDeps, 'memory' | 'assistField'> = {},
 ): HandlerTestKit {
   const source = new FakeIssueSource();
   const store = openStoreInMemory();
@@ -112,6 +112,7 @@ export function makeHandlerTestKit(
         hasClaudeCodeCredentials: () => false,
       },
       ...(dependencyOverride.memory ? { memory: dependencyOverride.memory } : {}),
+      ...(dependencyOverride.assistField ? { assistField: dependencyOverride.assistField } : {}),
     },
     subscriptions: registry,
   });

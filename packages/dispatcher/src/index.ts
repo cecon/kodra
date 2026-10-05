@@ -3,6 +3,7 @@ export const PACKAGE_NAME = '@kanbots/dispatcher';
 export {
   ComposerError,
   createComposer,
+  createFieldAssistant,
   createPrDescriptionDrafter,
   createSuggester,
   type BacklogEntry,
@@ -13,6 +14,9 @@ export {
   type DraftIssueFn,
   type DraftIssueInput,
   type DraftPrDescriptionFn,
+  type AssistFieldFn,
+  type AssistFieldInput,
+  type FieldAssistMode,
   type DraftPrDescriptionInput,
   type SpawnFn,
   type SuggestFeatureFn,

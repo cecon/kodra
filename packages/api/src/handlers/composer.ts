@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { DraftedIssue } from '../bridge.js';
+import type { AssistFieldInput, DraftedIssue } from '../bridge.js';
 import { collectSuggestionEntries } from '../suggestion-context.js';
-import { parseArgs } from './errors.js';
+import { badRequest, parseArgs } from './errors.js';
 import type { HandlerDeps } from './types.js';
 
 const draftSchema = z
@@ -17,6 +17,25 @@ export interface DraftArgs {
 export async function draft(deps: HandlerDeps, args: DraftArgs): Promise<DraftedIssue> {
   const parsed = parseArgs(draftSchema, args);
   return deps.draftIssue({ description: parsed.description });
+}
+
+const assistSchema = z
+  .object({
+    mode: z.enum(['improve-description', 'suggest-title']),
+    title: z.string().max(500),
+    description: z.string().max(20_000),
+  })
+  .strict();
+
+/** Per-field AI help in the new-task form: polish the description or
+ *  name the task. Needs at least some text to work from. */
+export async function assist(deps: HandlerDeps, args: AssistFieldInput): Promise<DraftedIssue> {
+  const parsed = parseArgs(assistSchema, args);
+  if (!deps.assistField) throw badRequest('AI field help is not available in this build');
+  if (parsed.title.trim() === '' && parsed.description.trim() === '') {
+    throw badRequest('Write a title or a description first');
+  }
+  return deps.assistField(parsed);
 }
 
 const suggestSchema = z

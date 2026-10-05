@@ -7,6 +7,7 @@ import type { AgentSupervisor } from '../agent-runs/supervisor.js';
 import type { AutopilotManager } from '../autopilot/orchestrator.js';
 import type { ToolCaller } from '../tool-policy.js';
 import type {
+  AssistFieldFn,
   Config,
   DecisionChangePayload,
   DraftIssueFn,
@@ -105,6 +106,9 @@ export interface HandlerDeps {
    * the renderer can fall back to a manual title/body.
    */
   draftPrDescription?: DraftPrDescriptionFn;
+  /** Optional. Backs `composer:assist`, the per-field AI help in the
+   *  new-task form; without it the channel returns a BadRequest. */
+  assistField?: AssistFieldFn;
   autopilot: AutopilotManager;
   analyzeSentryError: SentryAnalyzerFn;
   sentry: SentryRuntime;
