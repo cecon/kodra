@@ -1,8 +1,6 @@
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
-import { IconsaxIcon } from '@kanbots/ui';
-import { MagicStar } from 'iconsax-react';
 
 export interface AiAssistButtonProps {
   /** Short action label shown on the button, e.g. "Improve writing". */
@@ -13,6 +11,17 @@ export interface AiAssistButtonProps {
   /** When set, the button is disabled and the tooltip says why. */
   disabledReason?: string | null;
   onClick: () => void;
+}
+
+/** The "AI" sparkles: a large four-point star and two small ones. */
+function SparklesIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M10 2.5c.4 4.6 2.9 7.1 7.5 7.5-4.6.4-7.1 2.9-7.5 7.5-.4-4.6-2.9-7.1-7.5-7.5 4.6-.4 7.1-2.9 7.5-7.5Z" />
+      <path d="M18.5 1c.2 2.1 1.4 3.3 3.5 3.5-2.1.2-3.3 1.4-3.5 3.5-.2-2.1-1.4-3.3-3.5-3.5 2.1-.2 3.3-1.4 3.5-3.5Z" />
+      <path d="M18 15c.2 2.4 1.6 3.8 4 4-2.4.2-3.8 1.6-4 4-.2-2.4-1.6-3.8-4-4 2.4-.2 3.8-1.6 4-4Z" />
+    </svg>
+  );
 }
 
 /** Sparkle + label button that sits in a form field's label row. */
@@ -35,13 +44,7 @@ export function AiAssistButton({
           aria-busy={busy}
           disabled={disabled}
           onClick={onClick}
-          startIcon={
-            busy ? (
-              <CircularProgress size={12} />
-            ) : (
-              <IconsaxIcon icon={MagicStar} size={14} variant="Bulk" />
-            )
-          }
+          startIcon={busy ? <CircularProgress size={12} /> : <SparklesIcon size={14} />}
           sx={{
             minWidth: 0,
             py: 0.25,
