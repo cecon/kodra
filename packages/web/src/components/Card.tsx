@@ -21,7 +21,16 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { IconButton, IconsaxIcon } from '@kanbots/ui';
-import { Hierarchy, MessageQuestion, More, Play, StopCircle, Trash } from 'iconsax-react';
+import {
+  ArrowRotateLeft,
+  Hierarchy,
+  MessageQuestion,
+  More,
+  Play,
+  Refresh,
+  StopCircle,
+  Trash,
+} from 'iconsax-react';
 import { api } from '../api.js';
 import { useFocusedRepo } from '../hooks/useFocusedRepo.js';
 import { dispatchIssuesRefetch } from '../hooks/useIssues.js';
@@ -34,7 +43,8 @@ import {
   tagFromLabels,
   withStatus,
 } from '../labels.js';
-import type { Issue, IssueActiveRun, ShipStatus } from '../types.js';
+import type { ReviewGatePayload } from '@kanbots/api';
+import type { Issue, IssueActiveRun, ShipStatus, StatusKey } from '../types.js';
 import { agentColor, agentLabel, priorityColor, tagColor } from './board/boardStyle.js';
 
 /** The card's run while an agent is still working on it (or waiting on
@@ -46,6 +56,30 @@ export function liveRunOf(issue: Issue): IssueActiveRun | null {
   return run.status === 'starting' || run.status === 'running' || run.status === 'awaiting_input'
     ? run
     : null;
+}
+
+/** The pre-review gate of a card in Review, else null. */
+export function reviewGateOf(issue: Issue): ReviewGatePayload | null {
+  return issue.status === 'review' ? (issue.reviewGate ?? null) : null;
+}
+
+/**
+ * Why the card can't go to `target` right now, or null when it can. A live
+ * agent owns its worktree; a Review card is locked while its checks run,
+ * and once they fail it can only go back to the agent (In progress).
+ */
+export function moveBlockedReason(issue: Issue, target: StatusKey | null): string | null {
+  if (liveRunOf(issue) !== null) {
+    return `#${issue.number} has an agent working on it. Stop it first (⋯ → Stop agent) or wait for it to finish.`;
+  }
+  const gate = reviewGateOf(issue);
+  if (gate?.state === 'checking') {
+    return `#${issue.number} is running its pre-review checks. Wait for them or stop them (⋯ → Stop checks).`;
+  }
+  if (gate?.state === 'failed' && target !== 'inProgress') {
+    return `#${issue.number} failed its checks: it can only go back to the agent (drag it to In progress, or ⋯ → Send back to agent).`;
+  }
+  return null;
 }
 
 export function cardDragId(issueNumber: IssueRef): string {
@@ -74,6 +108,45 @@ export interface CardProps {
   onOpen?: (issueNumber: IssueRef) => void;
 }
 
+const GATE_CHIP: Record<
+  ReviewGatePayload['state'],
+  { label: string; color: 'warning' | 'success' | 'error' | 'secondary'; title: string }
+> = {
+  checking: {
+    label: 'Checking…',
+    color: 'warning',
+    title:
+      "Running the pre-review checks on the agent's branch. The card is locked until they finish.",
+  },
+  passed: {
+    label: 'Checks passed',
+    color: 'success',
+    title: 'Every pre-review check passed: ready for your review.',
+  },
+  failed: {
+    label: 'Checks failed',
+    color: 'error',
+    title: 'A pre-review check failed. Send it back to the agent (⋯) to have it fixed.',
+  },
+  stopped: {
+    label: 'Checks stopped',
+    color: 'secondary',
+    title: 'The pre-review checks were stopped. Re-run them from ⋯.',
+  },
+};
+
+const CHECK_LABEL: Partial<Record<string, string>> = {
+  install: 'deps',
+  typecheck: 'tsc',
+  tests: 'tests',
+  lint: 'lint',
+  e2e: 'e2e',
+};
+
+function pillKind(status: string): 'pass' | 'fail' | 'running' | 'idle' {
+  return status === 'pass' || status === 'fail' || status === 'running' ? status : 'idle';
+}
+
 const pulse = keyframes`
   0% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -96,14 +169,24 @@ function CardBody({
   const priority = priorityFromLabels(issue.labels);
   // Every open card says whether an agent is on it; "Not running" means
   // none is working on it right now (never started, finished or stopped).
-  const idle = issue.status !== 'done' && agentLabel(issue.agent) === null;
-  const stateColor = idle ? 'secondary' : agentColor(issue.agent);
-  const stateLabel = idle ? 'Not running' : agentLabel(issue.agent);
+  // A Review card shows its pre-review gate instead.
+  const gate = reviewGateOf(issue);
+  const gateChip = gate ? GATE_CHIP[gate.state] : null;
+  const idle = !gateChip && issue.status !== 'done' && agentLabel(issue.agent) === null;
+  const stateColor = gateChip ? gateChip.color : idle ? 'secondary' : agentColor(issue.agent);
+  const stateLabel = gateChip ? gateChip.label : idle ? 'Not running' : agentLabel(issue.agent);
+  const stateTitle = gateChip
+    ? gateChip.title
+    : idle
+      ? 'No agent is working on this card. Start one from ⋯ → Run agent.'
+      : null;
   const active: IssueActiveRun | null = issue.activeRun ?? null;
   const branch = strippedBranch(active?.branch);
   const isRunning = issue.agent === 'running';
   const isBlocked = issue.agent === 'blocked';
-  const isReview = issue.agent === 'review';
+  // Ship / request changes only once the gate let the card through.
+  const isReview =
+    issue.agent === 'review' && gate?.state !== 'checking' && gate?.state !== 'failed';
   const tickerName = liveTool?.name ?? active?.currentTool ?? null;
   const tickerArg = liveTool?.arg ?? active?.currentArg ?? null;
   const decision = active?.pendingDecision ?? null;
@@ -157,9 +240,7 @@ function CardBody({
             color={stateColor}
             variant="light"
             label={stateLabel}
-            {...(idle
-              ? { title: 'No agent is working on this card. Start one from ⋯ → Run agent.' }
-              : {})}
+            {...(stateTitle ? { title: stateTitle } : {})}
             icon={
               <Box
                 component="span"
@@ -169,7 +250,9 @@ function CardBody({
                   borderRadius: '50%',
                   bgcolor: 'currentColor',
                   ml: '6px !important',
-                  ...(isRunning && { animation: `${pulse} 1.4s ease-in-out infinite` }),
+                  ...((isRunning || gate?.state === 'checking') && {
+                    animation: `${pulse} 1.4s ease-in-out infinite`,
+                  }),
                 }}
               />
             }
@@ -303,6 +386,18 @@ function CardBody({
             label={areas[0]}
             sx={{ ...chipSx, fontWeight: 400 }}
           />
+        ) : null}
+        {gate ? (
+          <Stack direction="row" spacing={0.5} aria-label="Pre-review checks">
+            {gate.checks.map((c) => (
+              <CheckPill
+                key={c.kind}
+                kind={pillKind(c.status)}
+                label={CHECK_LABEL[c.kind] ?? c.kind}
+                {...(c.status === 'fail' && c.summary ? { detail: c.summary } : {})}
+              />
+            ))}
+          </Stack>
         ) : null}
         {checks ? (
           <Stack direction="row" spacing={0.5} aria-label="Checks">
@@ -684,7 +779,16 @@ function DecisionActions({
   );
 }
 
-function CheckPill({ kind, label }: { kind: 'pass' | 'fail' | 'running' | 'idle'; label: string }) {
+function CheckPill({
+  kind,
+  label,
+  detail,
+}: {
+  kind: 'pass' | 'fail' | 'running' | 'idle';
+  label: string;
+  /** Output tail shown under the tooltip, e.g. why it failed. */
+  detail?: string;
+}) {
   const color =
     kind === 'pass'
       ? 'success.main'
@@ -695,7 +799,21 @@ function CheckPill({ kind, label }: { kind: 'pass' | 'fail' | 'running' | 'idle'
           : 'text.disabled';
   const icon = kind === 'pass' ? '✓' : kind === 'fail' ? '×' : kind === 'running' ? '↻' : '·';
   return (
-    <Tooltip title={`${label}: ${kind}`}>
+    <Tooltip
+      title={
+        detail ? (
+          <Box
+            component="span"
+            sx={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--ff-mono, monospace)' }}
+          >
+            {`${label}: ${kind}
+${detail}`}
+          </Box>
+        ) : (
+          `${label}: ${kind}`
+        )
+      }
+    >
       <Box
         component="span"
         aria-label={`${label} ${kind}`}
@@ -736,44 +854,42 @@ function CardMenu({ issue }: { issue: Issue }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stopping, setStopping] = useState(false);
+  // One menu action at a time: its label while it runs, its failure after.
+  const [pending, setPending] = useState<string | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
   const liveRun = liveRunOf(issue);
+  const gate = reviewGateOf(issue);
   const { focusedRepoId } = useFocusedRepo();
-  const [starting, setStarting] = useState(false);
-  const canRun = liveRun === null && issue.status !== 'done';
+  // A failed gate only goes back to the agent (with its errors), and a
+  // running one has to finish or be stopped first.
+  const canRun =
+    liveRun === null &&
+    issue.status !== 'done' &&
+    gate?.state !== 'checking' &&
+    gate?.state !== 'failed';
 
-  async function runAgent(): Promise<void> {
-    setStarting(true);
+  async function perform(label: string, failure: string, action: () => Promise<unknown>) {
+    setAnchor(null);
+    setPending(label);
     setStopError(null);
     try {
-      if (issue.status !== 'inProgress') {
-        await api.updateIssue(issue.number, { labels: withStatus(issue.labels, 'inProgress') });
-      }
-      await api.dispatchIssue(issue.number, {
-        fromStatus: issue.status,
-        ...(focusedRepoId !== null ? { repoId: focusedRepoId } : {}),
-      });
-      dispatchIssuesRefetch();
+      await action();
     } catch (err) {
-      setStopError(`Couldn't start an agent: ${err instanceof Error ? err.message : String(err)}`);
-      dispatchIssuesRefetch();
+      setStopError(`${failure}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setStarting(false);
+      setPending(null);
+      dispatchIssuesRefetch();
     }
   }
 
-  async function stopAgent(runId: number): Promise<void> {
-    setStopping(true);
-    setStopError(null);
-    try {
-      await api.stopAgent(runId);
-      dispatchIssuesRefetch();
-    } catch (err) {
-      setStopError(`Couldn't stop the agent: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setStopping(false);
+  async function runAgent(): Promise<void> {
+    if (issue.status !== 'inProgress') {
+      await api.updateIssue(issue.number, { labels: withStatus(issue.labels, 'inProgress') });
     }
+    await api.dispatchIssue(issue.number, {
+      fromStatus: issue.status,
+      ...(focusedRepoId !== null ? { repoId: focusedRepoId } : {}),
+    });
   }
 
   async function remove(): Promise<void> {
@@ -813,30 +929,68 @@ function CardMenu({ issue }: { issue: Issue }) {
         <IconsaxIcon icon={More} size={16} />
       </IconButton>
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        {gate?.state === 'failed' ? (
+          <MenuItem
+            disabled={pending !== null}
+            onClick={() =>
+              void perform('Sending back…', "Couldn't send it back", () =>
+                api.sendBackToAgent(issue.number),
+              )
+            }
+            sx={{ gap: 1, color: 'warning.main' }}
+          >
+            <IconsaxIcon icon={ArrowRotateLeft} size={16} />
+            Send back to agent
+          </MenuItem>
+        ) : null}
         {canRun ? (
           <MenuItem
-            disabled={starting}
-            onClick={() => {
-              setAnchor(null);
-              void runAgent();
-            }}
+            disabled={pending !== null}
+            onClick={() => void perform('Starting…', "Couldn't start an agent", runAgent)}
             sx={{ gap: 1 }}
           >
             <IconsaxIcon icon={Play} size={16} />
-            {starting ? 'Starting…' : 'Run agent'}
+            Run agent
           </MenuItem>
         ) : null}
         {liveRun ? (
           <MenuItem
-            disabled={stopping}
-            onClick={() => {
-              setAnchor(null);
-              void stopAgent(liveRun.id);
-            }}
+            disabled={pending !== null}
+            onClick={() =>
+              void perform('Stopping…', "Couldn't stop the agent", () => api.stopAgent(liveRun.id))
+            }
             sx={{ gap: 1 }}
           >
             <IconsaxIcon icon={StopCircle} size={16} />
-            {stopping ? 'Stopping…' : 'Stop agent'}
+            Stop agent
+          </MenuItem>
+        ) : null}
+        {gate?.state === 'checking' ? (
+          <MenuItem
+            disabled={pending !== null}
+            onClick={() =>
+              void perform('Stopping…', "Couldn't stop the checks", () =>
+                api.stopReviewGate(gate.runId),
+              )
+            }
+            sx={{ gap: 1 }}
+          >
+            <IconsaxIcon icon={StopCircle} size={16} />
+            Stop checks
+          </MenuItem>
+        ) : null}
+        {gate && gate.state !== 'checking' ? (
+          <MenuItem
+            disabled={pending !== null}
+            onClick={() =>
+              void perform('Starting…', "Couldn't run the checks", () =>
+                api.runReviewGate(gate.runId),
+              )
+            }
+            sx={{ gap: 1 }}
+          >
+            <IconsaxIcon icon={Refresh} size={16} />
+            Re-run checks
           </MenuItem>
         ) : null}
         <MenuItem

@@ -1,4 +1,6 @@
 import {
+  detectProject,
+  planChecks,
   resolveCheckCommand,
   runCheck,
   type CheckCommand,
@@ -71,11 +73,25 @@ export async function runChecks(deps: RunChecksDeps, args: RunChecksArgs): Promi
 
   const overrides = await loadCheckOverrides(deps);
   const cwd = run.worktreePath;
+  // Run each check the way the project defines it (its package manager and
+  // scripts); fall back to the configured/default command otherwise.
+  const planned = new Map(
+    planChecks(
+      await detectProject(cwd),
+      kinds.filter((k): k is Exclude<CheckKind, 'install'> => k !== 'install'),
+      overrides,
+    ).map((c) => [c.kind, c]),
+  );
   for (const checkRow of started) {
-    const command = resolveCheckCommand(checkRow.kind, overrides);
+    const command = planned.get(checkRow.kind) ?? resolveCheckCommand(checkRow.kind, overrides);
     void runImpl({ cwd, command })
       .then((result) => {
-        finishCheck(deps, checkRow.id, result.status, result.summary);
+        finishCheck(
+          deps,
+          checkRow.id,
+          result.status === 'stopped' ? 'idle' : result.status,
+          result.summary,
+        );
       })
       .catch((err: unknown) => {
         finishCheck(deps, checkRow.id, 'fail', err instanceof Error ? err.message : String(err));
@@ -88,10 +104,10 @@ export async function runChecks(deps: RunChecksDeps, args: RunChecksArgs): Promi
   return started;
 }
 
-function finishCheck(
-  deps: RunChecksDeps,
+export function finishCheck(
+  deps: HandlerDeps,
   id: number,
-  status: 'pass' | 'fail',
+  status: 'pass' | 'fail' | 'idle',
   summary: string,
 ): void {
   const store = deps.store;
@@ -110,7 +126,9 @@ function finishCheck(
   }
 }
 
-async function loadCheckOverrides(deps: HandlerDeps): Promise<CheckCommandOverrides | undefined> {
+export async function loadCheckOverrides(
+  deps: HandlerDeps,
+): Promise<CheckCommandOverrides | undefined> {
   if (!deps.config.repoPath) return undefined;
   try {
     const cfg = await readWorkspaceConfig(deps.config.repoPath);

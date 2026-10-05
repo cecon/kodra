@@ -809,6 +809,10 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
         );
         labels.push('status:review', 'agent:idle');
         await source.updateIssue(thread.issueNumber, { labels });
+        // Pre-review gate: lint/typecheck/tests on the run's worktree before
+        // the card is up for human review (`handlers` is assigned below, long
+        // before any run can complete).
+        await handlers['review-gate:run']({ runId: run.id });
       })().catch(() => {
         // label errors must not crash the supervisor hook
       });

@@ -103,6 +103,13 @@ export {
   type CheckResult,
   type RunCheckOptions,
 } from './checks.js';
+export {
+  detectProject,
+  installCommand,
+  planChecks,
+  type PackageManager,
+  type ProjectInfo,
+} from './project-detect.js';
 
 export {
   inspectToolUse,

@@ -21,6 +21,7 @@ import type {
 } from '../bridge.js';
 import { bootstrapWorkspace } from '../workspace-bootstrap.js';
 import { sweepAllRunsForThread } from './agent-runs.js';
+import { gateForIssue } from './review-gate.js';
 import { GitHubClient } from '@kanbots/core';
 import { issueRefSchema } from '../issue-ref.js';
 import { alreadyActive, badRequest, mapIssueError, notFound, parseArgs } from './errors.js';
@@ -210,14 +211,20 @@ export async function list(deps: HandlerDeps, args: ListIssuesArgs): Promise<Dec
   const activeRunMap = buildActiveRunMap(deps);
   const sentryMap = buildSentryMetaMap(deps);
   const subIssueCountMap = buildSubIssueCountMap(deps);
-  return issues.map((issue) =>
-    decorateIssue(
+  return issues.map((issue) => {
+    const decorated = decorateIssue(
       issue,
       activeRunMap.get(issue.number) ?? null,
       sentryMap.get(issue.number) ?? null,
       subIssueCountMap.get(issue.number) ?? 0,
-    ),
-  );
+    );
+    // Review cards carry their pre-review gate so the board can lock them
+    // while it runs and show whether they passed.
+    if (decorated.status === 'review' && decorated.activeRun === null) {
+      decorated.reviewGate = gateForIssue(deps, issue.number);
+    }
+    return decorated;
+  });
 }
 
 export async function listArchived(deps: HandlerDeps): Promise<DecoratedIssue[]> {

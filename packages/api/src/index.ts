@@ -201,6 +201,8 @@ export type {
   PrCommentsListResult,
   PreviewState,
   PreviewStatePayload,
+  ReviewGatePayload,
+  ReviewGateState,
   RecentActivityKind,
   RecentActivityPayload,
   ProviderConfigPayload,

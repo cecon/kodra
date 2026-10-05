@@ -30,7 +30,8 @@ export interface StartCheckInput {
 
 export interface FinishCheckInput {
   id: number;
-  status: 'pass' | 'fail';
+  /** `idle`: the check was stopped before it finished. */
+  status: 'pass' | 'fail' | 'idle';
   summary?: string;
 }
 

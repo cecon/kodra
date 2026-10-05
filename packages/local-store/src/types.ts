@@ -139,7 +139,8 @@ export interface Card<P = unknown> {
   resolvedAt: string | null;
 }
 
-export type CheckKind = 'typecheck' | 'tests' | 'lint' | 'e2e';
+/** `install` is the review gate's dependency install, recorded like a check. */
+export type CheckKind = 'install' | 'typecheck' | 'tests' | 'lint' | 'e2e';
 export type CheckStatus = 'idle' | 'running' | 'pass' | 'fail';
 export type PreviewState = 'idle' | 'booting' | 'live' | 'crashed' | 'stopped';
 

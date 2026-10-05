@@ -31,7 +31,12 @@ import { BoardFilters } from '../components/board/BoardFilters.js';
 import { BoardToolbar } from '../components/board/BoardToolbar.js';
 import { AgentUsageRow } from '../components/board/AgentUsageRow.js';
 import { BulkActionBar, type BulkStatusTarget } from '../components/board/BulkActionBar.js';
-import { CardPreview, liveRunOf, type CardSelectModifiers } from '../components/Card.js';
+import {
+  CardPreview,
+  moveBlockedReason,
+  reviewGateOf,
+  type CardSelectModifiers,
+} from '../components/Card.js';
 import { Column, type SuggestActivity } from '../components/Column.js';
 import { PersonaPickerModal } from '../components/modals/PersonaPickerModal.js';
 import { useBoardAgentStreams } from '../hooks/useBoardAgentStreams.js';
@@ -430,12 +435,24 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     const current = list.find((i) => String(i.number) === String(issueNumber));
     if (!current) return;
     if (current.status === targetStatus) return;
-    // A live agent owns its worktree; moving the card (to Done above all,
-    // which removes worktrees) has to wait until the run ends or is stopped.
-    if (liveRunOf(current) !== null) {
-      setMoveError(
-        `#${issueNumber} has an agent working on it. Stop it first (⋯ → Stop agent) or wait for it to finish.`,
-      );
+    // Live agents, running review checks and failed checks restrict where
+    // the card can go (see moveBlockedReason).
+    const blocked = moveBlockedReason(current, targetStatus);
+    if (blocked !== null) {
+      setMoveError(blocked);
+      return;
+    }
+    // Failed checks go back to the agent with the errors as its prompt,
+    // instead of a plain move + fresh dispatch.
+    if (reviewGateOf(current)?.state === 'failed') {
+      try {
+        await api.sendBackToAgent(issueNumber);
+        setMoveError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setMoveError(`Couldn't send #${issueNumber} back to the agent: ${message}`);
+      }
+      dispatchIssuesRefetch();
       return;
     }
 
@@ -557,6 +574,9 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
         targets.map(async (n) => {
           const issue = before.find((i) => String(i.number) === String(n));
           if (!issue) return null;
+          // Same rules as a drag: locked cards stay where they are.
+          const blocked = moveBlockedReason(issue, status);
+          if (blocked !== null) throw new Error(blocked);
           const nextLabels = withStatus(issue.labels, status);
           return api.updateIssue(n, { labels: nextLabels });
         }),

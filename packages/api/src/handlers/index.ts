@@ -1,6 +1,7 @@
 import type { BridgeChannels, ChannelArgs, ChannelName, ChannelResult } from '../bridge.js';
 import * as agentActions from './agent-actions.js';
 import * as agentChecks from './agent-checks.js';
+import * as reviewGate from './review-gate.js';
 import * as agentCli from './agent-cli.js';
 import * as agentEvents from './agent-events.js';
 import * as agentPreview from './agent-preview.js';
@@ -106,6 +107,9 @@ export function createHandlers(opts: CreateHandlersOptions): Handlers {
     'agent-runs:checks:list': (args) => agentChecks.list(deps, args),
     'agent-runs:checks:run': (args) => agentChecks.runChecks(deps, args),
     'agent-runs:checks:commands': () => agentChecks.commands(deps),
+    'review-gate:run': (args) => reviewGate.run(deps, args),
+    'review-gate:stop': async (args) => reviewGate.stop(deps, args),
+    'review-gate:send-back': (args) => reviewGate.sendBack(deps, args),
     'agent-cli:slash-commands': (args) => agentCli.slashCommands(deps, args),
     'agent-runs:preview:get': (args) => agentPreview.getPreview(deps, args),
     'agent-runs:preview:start': (args) => agentPreview.startRunPreview(deps, args),

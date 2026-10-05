@@ -372,6 +372,17 @@ export interface DecoratedIssue extends Issue {
    * children. Cloud mode leaves this unset until the cloud edition
    * grows its own relations table. */
   subIssueCount?: number;
+  /** Pre-review gate of a Review card: the checks run on its latest run's
+   *  worktree. Null when the card isn't in Review or nothing was checked. */
+  reviewGate?: ReviewGatePayload | null;
+}
+
+export type ReviewGateState = 'checking' | 'passed' | 'failed' | 'stopped';
+
+export interface ReviewGatePayload {
+  runId: number;
+  state: ReviewGateState;
+  checks: Array<{ kind: CheckKind; status: AgentCheck['status']; summary: string | null }>;
 }
 
 /** Minimal run summary used for per-message attribution in threads: a
@@ -968,6 +979,9 @@ export interface BridgeChannels {
     args: { runId: number; kinds?: CheckKind[] };
     result: AgentCheck[];
   };
+  'review-gate:run': { args: { runId: number }; result: AgentCheck[] };
+  'review-gate:stop': { args: { runId: number }; result: { stopped: boolean } };
+  'review-gate:send-back': { args: { number: IssueRef }; result: { ok: true } };
   'agent-runs:checks:commands': {
     args: void;
     result: Record<CheckKind, { command: string; args: string[] }>;

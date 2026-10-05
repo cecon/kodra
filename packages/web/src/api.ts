@@ -790,6 +790,11 @@ export const api = {
     }
     return invoke('issues:archive', { number: issueNumber });
   },
+  /** Pre-review gate: (re)run, stop, or send a failed one back to the agent. */
+  runReviewGate: (runId: number) => invoke('review-gate:run', { runId }),
+  stopReviewGate: (runId: number) => invoke('review-gate:stop', { runId }),
+  sendBackToAgent: (issueNumber: IssueRef) =>
+    invoke('review-gate:send-back', { number: issueNumber }),
   /** Archives the card and removes the worktrees its runs created. Cloud
    *  cards have no local worktrees, so there it is a plain archive. */
   deleteIssue: async (
