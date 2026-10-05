@@ -57,6 +57,7 @@ import { renderMarkdown } from '../../lib/markdown.js';
 import type {
   AgentEvent,
   AgentRun,
+  AgentCheck,
   AgentRunStatus,
   AutopilotChildEntry,
   AutopilotPlanningSlot,
@@ -2680,6 +2681,62 @@ const RUN_STATUS_TEXT: Record<AgentRunStatus, string> = {
   starting: 'Starting',
 };
 
+/**
+ * A run's check results under its history row. "Completed" only says the
+ * agent's session ended; whether the code holds up is what the checks say.
+ */
+function RunChecksLine({ runId }: { runId: number }) {
+  const [checks, setChecks] = useState<AgentCheck[] | null>(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAgentRunChecks(runId)
+      .then((rows) => {
+        if (!cancelled) setChecks(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, tick]);
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.kanbots : undefined;
+    if (!bridge) return;
+    return bridge.subscribe('checks:changed', (payload: unknown) => {
+      if (payload !== null && typeof payload === 'object' && 'runId' in payload) {
+        if (payload.runId === runId) setTick((t) => t + 1);
+      }
+    });
+  }, [runId]);
+  if (checks === null) return null;
+  if (checks.length === 0) {
+    return (
+      <Typography variant="caption" color="text.secondary" component="div">
+        Checks: not run
+      </Typography>
+    );
+  }
+  const failed = checks.filter((c) => c.status === 'fail');
+  const running = checks.some((c) => c.status === 'running');
+  const verdict = running
+    ? { text: 'checks running…', color: 'warning.main' }
+    : failed.length > 0
+      ? { text: `checks failed (${failed.map((c) => c.kind).join(', ')})`, color: 'error.main' }
+      : checks.every((c) => c.status === 'pass')
+        ? { text: 'checks passed', color: 'success.main' }
+        : { text: 'checks stopped', color: 'text.secondary' };
+  return (
+    <Typography variant="caption" component="div" sx={{ color: verdict.color, fontWeight: 600 }}>
+      {verdict.text}
+      <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+        {' · '}
+        {checks.map((c) => `${c.kind} ${c.status}`).join(' · ')}
+      </Box>
+    </Typography>
+  );
+}
+
 function RunsTab({
   issueNumber,
   refreshKey,
@@ -2772,8 +2829,12 @@ function RunsTab({
                     </Typography>
                   </Stack>
                   <Typography variant="body2" sx={{ mt: 0.25, wordBreak: 'break-word' }}>
-                    {r.exitReason ?? '(no exit reason)'}
+                    {r.exitReason ??
+                      (status === 'complete'
+                        ? 'The agent finished its session.'
+                        : '(no exit reason)')}
                   </Typography>
+                  {isActive ? null : <RunChecksLine runId={r.id} />}
                   <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
                     {r.model ?? '—'} · {fmtTokens(r.tokenUsageInput)}/
                     {fmtTokens(r.tokenUsageOutput)} tok ·{' '}
