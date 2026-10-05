@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -73,8 +74,66 @@ export async function diff(deps: HandlerDeps, args: RunIdArgs): Promise<DiffPayl
   const parsed = parseArgs(idSchema, args);
   const run = deps.store.agentRuns.findById(parsed.runId);
   if (!run) throw notFound(`agent run ${parsed.runId} not found`);
-  if (!run.worktreePath) throw badRequest('run has no worktree');
-  return collectDiff(run.worktreePath, run.branchName, run.baseBranch);
+  return runDiff(deps, run);
+}
+
+/**
+ * The run's changes: from its worktree while it exists (committed and
+ * uncommitted work), else from its branch, which closing a card keeps when
+ * it holds commits.
+ */
+async function runDiff(deps: HandlerDeps, run: AgentRun): Promise<DiffPayload> {
+  if (run.worktreePath && existsSync(run.worktreePath)) {
+    return collectDiff(run.worktreePath, run.branchName, run.baseBranch);
+  }
+  const repoPath = deps.config.repoPath;
+  if (repoPath && run.branchName) {
+    const branchDiff = await collectBranchDiff(repoPath, run.branchName, run.baseBranch);
+    if (branchDiff) return branchDiff;
+  }
+  throw badRequest(
+    run.branchName
+      ? `This run's worktree was removed and its branch ${run.branchName} no longer exists, so there is no diff to show.`
+      : 'This run has no worktree or branch, so there is no diff to show.',
+  );
+}
+
+/** A branch's changes since it forked from base, read from the main repo.
+ *  Null when the branch doesn't exist. */
+async function collectBranchDiff(
+  repoPath: string,
+  branch: string,
+  preferred?: string | null,
+): Promise<DiffPayload | null> {
+  try {
+    await execFileAsync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
+      cwd: repoPath,
+    });
+  } catch {
+    return null;
+  }
+  const base = await detectBase(repoPath, preferred);
+  let forkPoint = base;
+  try {
+    const { stdout } = await execFileAsync('git', ['merge-base', base, branch], { cwd: repoPath });
+    if (stdout.trim()) forkPoint = stdout.trim();
+  } catch {
+    // no shared ancestor: diff against base itself
+  }
+  const statuses = parseNameStatus(
+    await execGitText(['diff', '--name-status', forkPoint, branch], repoPath, 16 * 1024 * 1024),
+  );
+  const patches = splitUnifiedDiff(
+    statuses.length > 0
+      ? await execGitText(['diff', forkPoint, branch], repoPath, 32 * 1024 * 1024)
+      : '',
+  );
+  const files: DiffFile[] = statuses.map((st) => ({
+    path: st.path,
+    status: st.status,
+    patch: patches.get(st.path) ?? '',
+  }));
+  return { base, branch, files, empty: files.length === 0 };
 }
 
 export async function revealWorktree(
@@ -107,9 +166,8 @@ export async function stats(deps: HandlerDeps, args: RunIdArgs): Promise<RunStat
 
   const run = deps.store.agentRuns.findById(parsed.runId);
   if (!run) throw notFound(`agent run ${parsed.runId} not found`);
-  if (!run.worktreePath) throw badRequest('run has no worktree');
 
-  const collected = await collectDiff(run.worktreePath, run.branchName);
+  const collected = await runDiff(deps, run);
   let additions = 0;
   let deletions = 0;
   for (const file of collected.files) {

@@ -185,9 +185,11 @@ function CardBody({
   const branch = strippedBranch(active?.branch);
   const isRunning = issue.agent === 'running';
   const isBlocked = issue.agent === 'blocked';
-  // Ship / request changes only once the gate let the card through.
+  // Ship / request changes on any Review card no agent is working on, once
+  // the gate let it through (runs end with agent:idle, not agent:review).
   const isReview =
-    issue.agent === 'review' && gate?.state !== 'checking' && gate?.state !== 'failed';
+    (issue.agent === 'review' || (issue.status === 'review' && liveRunOf(issue) === null)) &&
+    (gate === null || gate.state === 'passed');
   const tickerName = liveTool?.name ?? active?.currentTool ?? null;
   const tickerArg = liveTool?.arg ?? active?.currentArg ?? null;
   const decision = active?.pendingDecision ?? null;
