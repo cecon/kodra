@@ -320,6 +320,8 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     setPersonaPickerOpen(true);
   }, [suggesting]);
 
+  const draggingRef = useRef(false);
+
   const handleCardSelect = useCallback(
     (n: IssueRef, modifiers: CardSelectModifiers): void => {
       if (modifiers.shiftKey) {
@@ -330,13 +332,16 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
         cardSelection.toggle(n);
         return;
       }
-      // Plain click — focus the card and clear any multi-select. The
+      // Plain click — open the card (and clear any multi-select). The
       // selection ring (single) lives on the route hash; the multi-select
       // ring lives in the ephemeral hook state.
       if (cardSelection.selected.size > 0) cardSelection.clear();
       setSelectedNumberRef.current(n);
+      // The click that ends a drag is not a request to open the card.
+      if (!draggingRef.current) onOpenDetail?.(n);
     },
     [
+      onOpenDetail,
       cardSelection.anchor,
       cardSelection.clear,
       cardSelection.selectRange,
@@ -402,12 +407,17 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
   };
 
   function onDragStart(event: DragStartEvent): void {
+    draggingRef.current = true;
     const n = issueNumberFromDragId(event.active.id);
     setActiveNumber(n);
   }
 
   async function onDragEnd(event: DragEndEvent): Promise<void> {
     setActiveNumber(null);
+    // Cleared after the click that the pointer-up may still fire.
+    setTimeout(() => {
+      draggingRef.current = false;
+    }, 0);
     const { active, over } = event;
     if (!over) return;
 
@@ -653,7 +663,15 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => {
+        setActiveNumber(null);
+        draggingRef.current = false;
+      }}
+    >
       <BoardToolbar
         crumbs={[
           ...(config
