@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { isValidCustomIssueId, parseIssueRef, type IssueRef } from '@kanbots/core';
 import { useIssues } from '../../hooks/useIssues.js';
 import { useFocusTrap } from '../../hooks/useFocusTrap.js';
+import { shortcut } from '../../shortcuts.js';
 
 export interface PaletteAction {
   id: string;
@@ -124,7 +125,7 @@ export function Palette({
             {
               id: 'split-task',
               label: `Split #${selectedNumber} into sub-tasks…`,
-              hint: '⌘⇧S',
+              hint: shortcut('mod+shift+s'),
               category: 'agent' as const,
               onPick: () => {
                 onClose();

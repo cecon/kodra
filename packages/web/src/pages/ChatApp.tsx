@@ -27,6 +27,7 @@ import type {
   DecisionPayload,
   Message,
 } from '../types.js';
+import { shortcut } from '../shortcuts.js';
 
 const MemoizedToolUseCard = memo(ToolUseCard);
 const EMPTY_CARD_LIST: Card[] = [];
@@ -821,7 +822,7 @@ function ReplyFooter({
           <span className={`kb-chat-foot-opts-chev${showAdvanced ? ' open' : ''}`}>›</span>
           {showAdvanced ? 'Hide options' : 'Options'}
         </button>
-        <span className="kb-chat-foot-hint">⌘↵ to send</span>
+        <span className="kb-chat-foot-hint">{shortcut('mod+enter')} to send</span>
       </div>
       {error ? <div className="kb-chat-foot-error">{error}</div> : null}
     </div>

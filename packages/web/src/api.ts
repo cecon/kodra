@@ -783,6 +783,17 @@ export const api = {
     }
     return invoke('issues:archive', { number: issueNumber });
   },
+  /** Archives the card and removes the worktrees its runs created. Cloud
+   *  cards have no local worktrees, so there it is a plain archive. */
+  deleteIssue: async (
+    issueNumber: IssueRef,
+  ): Promise<{ worktreesRemoved: number; branchesKept: number }> => {
+    if (cloudCtx !== null) {
+      await api.archiveIssue(issueNumber);
+      return { worktreesRemoved: 0, branchesKept: 0 };
+    }
+    return invoke('issues:delete', { number: issueNumber });
+  },
   unarchiveIssue: async (issueNumber: IssueRef): Promise<Issue> => {
     if (cloudCtx !== null) {
       const bridge = getCloudBridge();

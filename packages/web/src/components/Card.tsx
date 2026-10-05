@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core';
 import type { IssueRef } from '@kanbots/core';
-import { memo, useEffect, useState, type MouseEvent } from 'react';
+import { memo, useEffect, useState, type MouseEvent, type SyntheticEvent } from 'react';
 import { alpha, keyframes, type Theme } from '@mui/material/styles';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
@@ -8,14 +8,19 @@ import AvatarGroup from '@mui/material/AvatarGroup';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import LinearProgress from '@mui/material/LinearProgress';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { IconsaxIcon } from '@kanbots/ui';
-import { Hierarchy, MessageQuestion } from 'iconsax-react';
+import { IconButton, IconsaxIcon } from '@kanbots/ui';
+import { Hierarchy, MessageQuestion, More, Trash } from 'iconsax-react';
 import { api } from '../api.js';
 import { useFocusedRepo } from '../hooks/useFocusedRepo.js';
 import { dispatchIssuesRefetch } from '../hooks/useIssues.js';
@@ -99,7 +104,8 @@ function CardBody({
       <Stack
         direction="row"
         spacing={0.75}
-        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+        // Right padding leaves room for the card's "⋯" menu button.
+        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5, pr: 3 }}
       >
         {tag ? (
           <Chip label={tag} size="small" color={tagColor(tag)} variant="outlined" sx={chipSx} />
@@ -695,6 +701,102 @@ function CheckPill({ kind, label }: { kind: 'pass' | 'fail' | 'running' | 'idle'
   );
 }
 
+/**
+ * "⋯" menu in the card's top-right corner. Delete archives the card and
+ * removes the worktrees its runs created, after a confirmation.
+ *
+ * The menu and dialog render in portals, but React still bubbles their
+ * events through the card, so the wrapper swallows them: otherwise a click
+ * in the dialog would select or open the card, or start a drag.
+ */
+function CardMenu({ issue }: { issue: Issue }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteIssue(issue.number);
+      setConfirmOpen(false);
+      dispatchIssuesRefetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const swallow = (e: SyntheticEvent) => e.stopPropagation();
+  return (
+    <Box
+      component="span"
+      className="kb-card-menu"
+      onClick={swallow}
+      onDoubleClick={swallow}
+      onPointerDown={swallow}
+      onKeyDown={swallow}
+      sx={{ position: 'absolute', top: 6, right: 6 }}
+    >
+      <IconButton
+        size="small"
+        color="secondary"
+        aria-label="Card actions"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={(e) => setAnchor(e.currentTarget)}
+        sx={{ width: 26, height: 26 }}
+      >
+        <IconsaxIcon icon={More} size={16} />
+      </IconButton>
+      <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            setConfirmOpen(true);
+          }}
+          sx={{ color: 'error.main', gap: 1 }}
+        >
+          <IconsaxIcon icon={Trash} size={16} />
+          Delete
+        </MenuItem>
+      </Menu>
+      <Dialog
+        open={confirmOpen}
+        onClose={() => !busy && setConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete #{issue.number}?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            “{issue.title}” leaves the board and any running agent is stopped. Its worktrees are
+            removed, discarding uncommitted changes in them; branches with commits are kept.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            The card itself stays listed under Archived and can be restored from there.
+          </Typography>
+          {error ? (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button color="secondary" onClick={() => setConfirmOpen(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="contained" color="error" onClick={() => void remove()} disabled={busy}>
+            {busy ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
 /** Card surface: state accent on the left, rings for focus and multi-select. */
 function cardSx(issue: Issue, selected: boolean, multiSelected: boolean, dragging: boolean) {
   const accent = agentColor(issue.agent);
@@ -771,6 +873,7 @@ function CardImpl({
       {...(draggable ? drag.attributes : { role: 'button', tabIndex: 0 })}
     >
       <CardBody issue={issue} liveTool={liveTool} />
+      <CardMenu issue={issue} />
     </Box>
   );
 }

@@ -82,6 +82,7 @@ export function createHandlers(opts: CreateHandlersOptions): Handlers {
     'issues:dispatch': (args) => issues.dispatch(deps, args),
     'issues:start-agent': (args) => agentActions.startAgent(deps, args),
     'issues:archive': (args) => agentActions.archive(deps, args),
+    'issues:delete': (args) => agentActions.deleteIssue(deps, args),
     'issues:unarchive': (args) => agentActions.unarchive(deps, args),
     'issues:approve': (args) => agentActions.approve(deps, args),
     'issues:request-changes': (args) => agentActions.requestChanges(deps, args),

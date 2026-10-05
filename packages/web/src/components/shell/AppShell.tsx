@@ -43,6 +43,7 @@ import { colorForLogin } from '../../labels.js';
 import type { Theme } from '../../stores/usePrefsStore.js';
 import { LeftRail } from '../rail/LeftRail.js';
 import { Logo } from '../Logo.js';
+import { shortcut } from '../../shortcuts.js';
 
 /**
  * The app chrome sits below every legacy overlay: modals, menus, palette,
@@ -169,7 +170,7 @@ function DrawerNav({
         <NavAction
           title="Command palette"
           icon={SearchNormal1}
-          shortcut="⌘K"
+          shortcut={shortcut('mod+k')}
           onClick={nav.onOpenPalette}
         />
         <NavAction title="Stats & cost" icon={Chart2} onClick={nav.onOpenStats} />
@@ -312,7 +313,7 @@ function HeaderContent({
           Search or jump to…
         </Typography>
         <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-          ⌘K
+          {shortcut('mod+k')}
         </Typography>
       </ButtonBase>
 

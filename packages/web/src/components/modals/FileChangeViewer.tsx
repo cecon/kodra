@@ -5,6 +5,7 @@ import { api, getCloudCtx } from '../../api.js';
 import { getBridge } from '../../desktop-bridge.js';
 import { InlineDiff, type InlineDiffMode } from '../run/InlineDiff.js';
 import { useDiffPrefs } from '../../hooks/useDiffPrefs.js';
+import { shortcut } from '../../shortcuts.js';
 
 const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'stopped', 'timed_out']);
 
@@ -219,7 +220,7 @@ function StartAgentOnFilePanel({
           />
           <div className="kb-fcv-reply-foot">
             {error ? <span className="kb-fcv-err">{error}</span> : null}
-            <span className="kb-fcv-hint">⌘⏎ to start</span>
+            <span className="kb-fcv-hint">{shortcut('mod+enter')} to start</span>
             <button
               type="button"
               className="kb-btn primary"
@@ -766,7 +767,7 @@ function WorktreeDiffCard({
               <div className="kb-fcv-reply-foot">
                 {postError ? <span className="kb-fcv-err">{postError}</span> : null}
                 {posted && reply.length === 0 ? <span className="kb-fcv-ok">Sent.</span> : null}
-                <span className="kb-fcv-hint">⌘⏎ to send</span>
+                <span className="kb-fcv-hint">{shortcut('mod+enter')} to send</span>
                 {cloudCtx !== null && hasActiveRun === false ? (
                   <>
                     <button

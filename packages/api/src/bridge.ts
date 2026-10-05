@@ -881,6 +881,15 @@ export interface BridgeChannels {
     result: AgentRun;
   };
   'issues:archive': { args: { number: IssueRef }; result: DecoratedIssue };
+  'issues:delete': {
+    args: { number: IssueRef };
+    result: {
+      issue: DecoratedIssue;
+      worktreesRemoved: number;
+      branchesDeleted: number;
+      branchesKept: number;
+    };
+  };
   'issues:unarchive': { args: { number: IssueRef }; result: DecoratedIssue };
   'issues:approve': { args: { number: IssueRef }; result: DecoratedIssue };
   'issues:request-changes': { args: { number: IssueRef }; result: DecoratedIssue };

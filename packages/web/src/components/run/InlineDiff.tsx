@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ReviewCommentPayload } from '../../api.js';
+import { shortcut } from '../../shortcuts.js';
 
 export type InlineDiffMode = 'unified' | 'split';
 
@@ -463,7 +464,7 @@ function CommentTrigger({ runId, filePath, lineNumber, side, onAdded }: CommentT
           />
           <div className="kb-idiff-comment-actions">
             {error !== null ? <span className="kb-idiff-comment-err">{error}</span> : null}
-            <span className="kb-idiff-comment-hint">⌘⏎ to add</span>
+            <span className="kb-idiff-comment-hint">{shortcut('mod+enter')} to add</span>
             <button type="button" className="kb-btn" onClick={cancel} disabled={posting}>
               Cancel
             </button>

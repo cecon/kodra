@@ -7,6 +7,7 @@ import type { Issue } from '../../types.js';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import { ModalFrame } from './ModalFrame.js';
+import { shortcut } from '../../shortcuts.js';
 
 export interface SplitModalProps {
   parentNumber: IssueRef;
@@ -121,7 +122,7 @@ export function SplitModal({ parentNumber, parentTitle, onClose, onSplit }: Spli
                 bgcolor: 'rgba(255,255,255,0.18)',
               }}
             >
-              ⌘↵
+              {shortcut('mod+enter')}
             </Box>
           </Button>
         </>

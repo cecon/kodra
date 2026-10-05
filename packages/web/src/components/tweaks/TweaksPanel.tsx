@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import type { WorkspaceBudgets } from '../../types.js';
 import type { Tweaks } from '../../hooks/useTweaks.js';
+import { shortcut } from '../../shortcuts.js';
 
 export interface TweaksPanelProps {
   tweaks: Tweaks;
@@ -95,7 +96,7 @@ export function TweaksPanel({
         <div className="kb-tweaks-label">Try things</div>
         <div className="kb-tweaks-actions">
           <button type="button" onClick={onOpenPalette}>
-            Open command palette (⌘K)
+            Open command palette ({shortcut('mod+k')})
           </button>
           {onFocusPaused ? (
             <button type="button" onClick={onFocusPaused}>

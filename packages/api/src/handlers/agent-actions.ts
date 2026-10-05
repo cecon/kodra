@@ -7,6 +7,7 @@ import { removeWorktree, type AgentRunProvider } from '@kanbots/dispatcher';
 import type { AgentRun, Store } from '@kanbots/local-store';
 import { z } from 'zod';
 import type { DecoratedIssue, SplitResult } from '../bridge.js';
+import { sweepAllRunsForThread } from './agent-runs.js';
 import { buildActiveRunMap, decorateIssue } from './issues.js';
 import { badRequest, parseArgs } from './errors.js';
 import { issueRefSchema } from '../issue-ref.js';
@@ -237,6 +238,31 @@ export async function archive(deps: HandlerDeps, args: NumberArgs): Promise<Deco
     state: 'closed',
   });
   return decorateIssue(updated);
+}
+
+export interface DeleteIssueResult {
+  issue: DecoratedIssue;
+  worktreesRemoved: number;
+  branchesDeleted: number;
+  /** Branches with commits not yet on base, left in place so that work can
+   *  still be recovered with `git worktree add`. */
+  branchesKept: number;
+}
+
+/**
+ * Removes a card from the board and frees its disk: archives the issue
+ * (stopping any live run or autopilot session first), then force-removes
+ * every worktree its runs created. Uncommitted changes in those worktrees
+ * are discarded; branches with unmerged commits are kept.
+ */
+export async function deleteIssue(deps: HandlerDeps, args: NumberArgs): Promise<DeleteIssueResult> {
+  const parsed = parseArgs(issueNumberSchema, args);
+  const issue = await archive(deps, { number: parsed.number });
+  const thread = findThreadForIssue(deps.store, parsed.number);
+  const cleanup = thread
+    ? await sweepAllRunsForThread(deps, thread.id)
+    : { worktreesRemoved: 0, branchesDeleted: 0, branchesKept: 0 };
+  return { issue, ...cleanup };
 }
 
 export async function unarchive(deps: HandlerDeps, args: NumberArgs): Promise<DecoratedIssue> {

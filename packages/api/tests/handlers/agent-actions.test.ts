@@ -21,6 +21,17 @@ describe('issues:archive', () => {
   });
 });
 
+describe('issues:delete', () => {
+  it('archives the issue and reports no cleanup when it never ran', async () => {
+    const { handlers, source } = makeHandlerTestKit();
+    source.setIssue(issueFixture(7, 'lucky', { labels: ['status:review', 'agent:review'] }));
+    const result = await handlers['issues:delete']({ number: 7 });
+    expect(result.issue.labels).toContain('archived');
+    expect(result.issue.state).toBe('closed');
+    expect(result).toMatchObject({ worktreesRemoved: 0, branchesDeleted: 0, branchesKept: 0 });
+  });
+});
+
 describe('issues:approve', () => {
   it('marks the issue done and closed', async () => {
     const { handlers, source } = makeHandlerTestKit();

@@ -77,6 +77,7 @@ import type {
   SlashCommandPayload,
   StatusKey,
 } from '../../types.js';
+import { shortcut } from '../../shortcuts.js';
 
 const TAB_LABELS: Record<DetailTab, string> = {
   autopilot: 'Autopilot',
@@ -917,7 +918,7 @@ function ReplyFooter({
         onClick={() => void send()}
         disabled={!body.trim() || sending}
       >
-        {sending ? 'Sending…' : 'Send'} <span className="kb-kbd">⌘↵</span>
+        {sending ? 'Sending…' : 'Send'} <span className="kb-kbd">{shortcut('mod+enter')}</span>
       </button>
       {error ? (
         <span style={{ color: 'var(--failed)', fontSize: 11, marginLeft: 8 }}>{error}</span>

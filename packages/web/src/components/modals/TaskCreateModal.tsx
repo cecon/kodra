@@ -27,6 +27,7 @@ import { useFocusedRepo } from '../../hooks/useFocusedRepo.js';
 import { dispatchIssuesRefetch } from '../../hooks/useIssues.js';
 import { priorityFromLabels, tagFromLabels } from '../../labels.js';
 import type { CardTemplatePayload, Issue, ProviderId } from '../../types.js';
+import { shortcut } from '../../shortcuts.js';
 
 type Mode = 'spec' | 'dispatch' | 'queue';
 type Tag = 'feat' | 'fix' | 'chore' | 'infra' | 'docs';
@@ -513,7 +514,7 @@ export function TaskCreateModal({
           <h2>New task</h2>
           <span className="grow" />
           <span style={{ color: 'var(--ink-3)', fontSize: 11.5 }}>
-            Press <span className="kb-kbd">⌘↵</span> to create
+            Press <span className="kb-kbd">{shortcut('mod+enter')}</span> to create
           </span>
           <button type="button" className="x-btn" onClick={onClose} aria-label="Close">
             <svg
@@ -642,7 +643,7 @@ export function TaskCreateModal({
                   onPaste={(e) => void handlePaste(e)}
                   rows={10}
                   ariaLabel="Task description"
-                  placeholder={`What is the user-facing outcome?\n\nAC:\n- A new user can register a passkey on first login\n- Existing users see a banner with passkey CTA\n\nTip: paste an image (⌘V / Ctrl+V) to attach it.`}
+                  placeholder={`What is the user-facing outcome?\n\nAC:\n- A new user can register a passkey on first login\n- Existing users see a banner with passkey CTA\n\nTip: paste an image (${shortcut('mod+v')}) to attach it.`}
                 />
                 {pasting > 0 ? (
                   <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
@@ -945,7 +946,7 @@ function SplitButton({
       >
         {primaryLabel}
         <span className="kb-kbd" style={{ marginLeft: 6 }}>
-          ⌘↵
+          {shortcut('mod+enter')}
         </span>
       </button>
       <button
