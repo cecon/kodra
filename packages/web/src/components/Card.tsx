@@ -424,6 +424,12 @@ function CardBody({
         />
       ) : null}
 
+      {issue.status === 'pr' &&
+      issue.pullRequest &&
+      (issue.pullRequest.ci === 'passed' || issue.pullRequest.ci === 'none') ? (
+        <MergeAction issueNumber={issue.number} />
+      ) : null}
+
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
         {branch ? (
           <Tooltip title={active?.branch ?? ''}>
@@ -511,6 +517,43 @@ function CardBody({
 
 function stopClick(e: MouseEvent<HTMLElement>): void {
   e.stopPropagation();
+}
+
+/** One-click merge on a PR card whose CI passed; the card then goes to Done. */
+function MergeAction({ issueNumber }: { issueNumber: IssueRef }) {
+  const [merging, setMerging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  function merge(e: MouseEvent<HTMLButtonElement>): void {
+    e.stopPropagation();
+    setMerging(true);
+    setError(null);
+    void api
+      .mergePullRequest(issueNumber)
+      .then(() => dispatchIssuesRefetch())
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setMerging(false));
+  }
+  return (
+    <Stack spacing={0.75} onClick={stopClick} onPointerDown={stopClick}>
+      <Tooltip title="Merge the pull request on GitHub; the card moves to Done.">
+        <Button
+          size="small"
+          variant="contained"
+          color="success"
+          disabled={merging}
+          onClick={merge}
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          {merging ? 'Merging…' : 'Merge PR'}
+        </Button>
+      </Tooltip>
+      {error ? (
+        <Typography variant="caption" color="error" role="alert">
+          {error}
+        </Typography>
+      ) : null}
+    </Stack>
+  );
 }
 
 function ReviewActions({
@@ -1272,6 +1315,19 @@ export const Card = memo(CardImpl, (prev, next) => {
   if (a.labels.length !== b.labels.length) return false;
   if (a.assignees.length !== b.assignees.length) return false;
   if ((a.subIssueCount ?? 0) !== (b.subIssueCount ?? 0)) return false;
+  // Pre-review gate and PR/CI drive the state chip and the card's actions.
+  const ga = a.reviewGate ?? null;
+  const gb = b.reviewGate ?? null;
+  if (
+    ga?.state !== gb?.state ||
+    ga?.runId !== gb?.runId ||
+    ga?.checks.map((c) => c.status).join() !== gb?.checks.map((c) => c.status).join()
+  ) {
+    return false;
+  }
+  const pa = a.pullRequest ?? null;
+  const pb = b.pullRequest ?? null;
+  if (pa?.number !== pb?.number || pa?.ci !== pb?.ci || pa?.state !== pb?.state) return false;
   // ActiveRun identity by id and core mutable fields. Include every field the
   // card body actually renders (branch, checks, decision, preview) so a late
   // backend update — e.g. branchName landing after status='starting' was first
