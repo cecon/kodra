@@ -176,7 +176,7 @@ function DrawerNav({
         <NavAction title="Stats & cost" icon={Chart2} onClick={nav.onOpenStats} />
         <NavAction title="Archive" icon={Archive} onClick={nav.onOpenArchive} />
       </NavGroup>
-      <NavGroup title="Configure">
+      <NavGroup title="Configure" collapsible>
         <NavAction title="Providers" icon={Flash} onClick={nav.onOpenProviders} />
         <NavAction title="Cloud" icon={Cloud} onClick={nav.onOpenCloud} />
         <NavAction title="House rules" icon={Book1} onClick={nav.onOpenRules} />

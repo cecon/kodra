@@ -93,11 +93,11 @@ function CardBody({
 }) {
   const tag = tagFromLabels(issue.labels, issue.isPullRequest);
   const priority = priorityFromLabels(issue.labels);
-  // Every open card says whether an agent is on it; "Idle" means none is
-  // working on it right now (never started, finished or stopped).
+  // Every open card says whether an agent is on it; "Not running" means
+  // none is working on it right now (never started, finished or stopped).
   const idle = issue.status !== 'done' && agentLabel(issue.agent) === null;
   const stateColor = idle ? 'secondary' : agentColor(issue.agent);
-  const stateLabel = idle ? 'Idle' : agentLabel(issue.agent);
+  const stateLabel = idle ? 'Not running' : agentLabel(issue.agent);
   const active: IssueActiveRun | null = issue.activeRun ?? null;
   const branch = strippedBranch(active?.branch);
   const isRunning = issue.agent === 'running';
@@ -156,6 +156,9 @@ function CardBody({
             color={stateColor}
             variant="light"
             label={stateLabel}
+            {...(idle
+              ? { title: 'No agent is working on this card. Move it to In progress to start one.' }
+              : {})}
             icon={
               <Box
                 component="span"

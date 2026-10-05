@@ -1,10 +1,12 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import type { Icon as IconComponent } from 'iconsax-react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
+import { ArrowDown2, type Icon as IconComponent } from 'iconsax-react';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
+import ButtonBase from '@mui/material/ButtonBase';
 import Chip, { type ChipProps } from '@mui/material/Chip';
+import Collapse from '@mui/material/Collapse';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -140,31 +142,106 @@ export function NavAction({
 export interface NavGroupProps {
   /** Caption above the group; hidden when the drawer is collapsed. */
   title?: string;
+  /** Lets the caption fold the group away. The open/closed state is kept
+   *  in localStorage under `kodra.nav.<storageKey>` (defaults to the title). */
+  collapsible?: boolean;
+  /** Initial state for a collapsible group that has nothing stored yet. */
+  defaultCollapsed?: boolean;
+  storageKey?: string;
   children: ReactNode;
+}
+
+function readCollapsed(key: string, fallback: boolean): boolean {
+  try {
+    const v = window.localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+function writeCollapsed(key: string, collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(key, collapsed ? '1' : '0');
+  } catch {
+    // storage unavailable: the state just won't survive a reload
+  }
 }
 
 // ==============================|| NAVIGATION - GROUP ||============================== //
 
-export function NavGroup({ title, children }: NavGroupProps) {
+export function NavGroup({
+  title,
+  collapsible = false,
+  defaultCollapsed = false,
+  storageKey,
+  children,
+}: NavGroupProps) {
   const drawerOpen = useDrawerOpen();
+  const key = `kodra.nav.${storageKey ?? title ?? 'group'}`;
+  const [collapsed, setCollapsed] = useState(() =>
+    collapsible ? readCollapsed(key, defaultCollapsed) : false,
+  );
+  // The mini drawer has no captions to click, so it always lists the icons.
+  const hidden = collapsible && collapsed && drawerOpen;
+
+  function toggle(): void {
+    setCollapsed((prev) => {
+      writeCollapsed(key, !prev);
+      return !prev;
+    });
+  }
+
+  const caption = (
+    <Typography
+      variant="h5"
+      color="secondary.dark"
+      sx={{ textTransform: 'uppercase', fontSize: '0.688rem' }}
+    >
+      {title}
+    </Typography>
+  );
+
   return (
     <List
       sx={{ py: 0, ...(drawerOpen && { mt: 1.5 }) }}
       subheader={
         title && drawerOpen ? (
-          <Box sx={{ pl: 3, mb: 1.5 }}>
-            <Typography
-              variant="h5"
-              color="secondary.dark"
-              sx={{ textTransform: 'uppercase', fontSize: '0.688rem' }}
+          collapsible ? (
+            <ButtonBase
+              onClick={toggle}
+              aria-expanded={!hidden}
+              sx={{
+                width: '100%',
+                justifyContent: 'space-between',
+                pl: 3,
+                pr: 2.5,
+                mb: hidden ? 0 : 1.5,
+                py: 0.25,
+              }}
             >
-              {title}
-            </Typography>
-          </Box>
+              {caption}
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  color: 'secondary.dark',
+                  transition: 'transform 150ms',
+                  transform: hidden ? 'rotate(-90deg)' : 'none',
+                }}
+              >
+                <IconsaxIcon icon={ArrowDown2} size={14} />
+              </Box>
+            </ButtonBase>
+          ) : (
+            <Box sx={{ pl: 3, mb: 1.5 }}>{caption}</Box>
+          )
         ) : undefined
       }
     >
-      {children}
+      <Collapse in={!hidden} timeout="auto" unmountOnExit>
+        {children}
+      </Collapse>
     </List>
   );
 }
