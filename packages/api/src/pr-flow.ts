@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { IssueRef } from '@kanbots/core';
@@ -56,9 +56,53 @@ function latestRunOf(deps: HandlerDeps, number: IssueRef): AgentRun | null {
   return thread ? deps.store.agentRuns.findLatestForThread(thread.id) : null;
 }
 
-function branchOf(deps: HandlerDeps, number: IssueRef): string {
-  const branch = latestRunOf(deps, number)?.branchName;
-  if (!branch) throw badRequest(`#${number} has no agent branch to open a pull request from`);
+/**
+ * The branch holding the card's work. Usually the latest run's, but a
+ * follow-up run can start on a fresh branch (e.g. when the first worktree
+ * was already removed) and then carry on the original one: so take the
+ * branch the latest worktree actually has checked out, else the newest run
+ * branch with commits ahead of its base.
+ */
+async function resolveBranch(deps: HandlerDeps, number: IssueRef): Promise<string | null> {
+  const repoPath = deps.config.repoPath;
+  const thread = deps.store.threads.findByIssue(deps.config.owner, deps.config.repo, number);
+  if (!repoPath || !thread) return null;
+  const runs = deps.store.agentRuns.listByThread(thread.id).sort((a, b) => b.id - a.id);
+  const candidates: Array<{ branch: string; base: string }> = [];
+  const latest = runs[0];
+  if (latest?.worktreePath && existsSync(latest.worktreePath)) {
+    try {
+      const head = (
+        await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], latest.worktreePath)
+      ).trim();
+      if (head && head !== 'HEAD')
+        candidates.push({ branch: head, base: latest.baseBranch ?? 'main' });
+    } catch {
+      // fall back to the recorded branches
+    }
+  }
+  for (const r of runs) {
+    if (r.branchName) candidates.push({ branch: r.branchName, base: r.baseBranch ?? 'main' });
+  }
+  for (const c of candidates) {
+    try {
+      const ahead = Number(
+        (
+          await run('git', ['rev-list', '--count', `${c.base}..refs/heads/${c.branch}`], repoPath)
+        ).trim(),
+      );
+      if (ahead > 0) return c.branch;
+    } catch {
+      // branch gone: next candidate
+    }
+  }
+  return null;
+}
+
+async function branchOf(deps: HandlerDeps, number: IssueRef): Promise<string> {
+  const branch = await resolveBranch(deps, number);
+  if (!branch)
+    throw badRequest(`#${number} has no agent branch with commits to open a pull request from`);
   return branch;
 }
 
@@ -173,7 +217,7 @@ export async function openPullRequest(
   number: IssueRef,
 ): Promise<PullRequestPayload> {
   const repoPath = repoPathOf(deps);
-  const branch = branchOf(deps, number);
+  const branch = await branchOf(deps, number);
   await assertNoUncommittedWork(deps, number);
   // Agent worktrees install a pre-push hook that refuses kodra/issue-*
   // branches, so an agent can't publish its own work. This push is the
@@ -213,7 +257,7 @@ export async function mergePullRequest(
   number: IssueRef,
 ): Promise<PullRequestPayload> {
   const repoPath = repoPathOf(deps);
-  const pr = await prForBranch(repoPath, branchOf(deps, number));
+  const pr = await prForBranch(repoPath, await branchOf(deps, number));
   if (!pr || pr.state !== 'OPEN') throw badRequest(`#${number} has no open pull request`);
   if (pr.ci === 'failed' || pr.ci === 'pending') {
     throw badRequest(
@@ -267,6 +311,25 @@ async function failedLogs(repoPath: string, branch: string): Promise<string> {
   }
 }
 
+/**
+ * Makes sure the latest run has a worktree on `branch` so the agent resumes
+ * on the PR's work rather than starting over from base: the worktree is
+ * gone when the card went through Done before (which removes worktrees).
+ */
+async function ensureWorktreeOn(
+  deps: HandlerDeps,
+  number: IssueRef,
+  branch: string,
+): Promise<void> {
+  const latest = latestRunOf(deps, number);
+  const repoPath = deps.config.repoPath;
+  if (!latest || !repoPath) return;
+  if (latest.worktreePath && existsSync(latest.worktreePath)) return;
+  const path = join(repoPath, '.kodra', 'worktrees', `issue-${String(number)}-pr`);
+  if (!existsSync(path)) await run('git', ['worktree', 'add', path, branch], repoPath);
+  deps.store.agentRuns.update(latest.id, { worktreePath: path, branchName: branch });
+}
+
 /** CI failed: back to In progress, resuming the agent with the failures. */
 export async function sendBackForCi(
   deps: HandlerDeps,
@@ -274,7 +337,9 @@ export async function sendBackForCi(
   pr: PullRequestPayload,
 ): Promise<void> {
   const repoPath = repoPathOf(deps);
-  const logs = await failedLogs(repoPath, branchOf(deps, number));
+  const branch = await branchOf(deps, number);
+  const logs = await failedLogs(repoPath, branch);
+  await ensureWorktreeOn(deps, number, branch);
   sentBack.set(key(deps, number), pr.headSha);
   await setStatus(deps, number, 'status:in-progress', 'agent:running');
   await postMessage(deps, {
@@ -284,7 +349,7 @@ export async function sendBackForCi(
       '',
       logs || '(The failing job logs could not be fetched; run the checks locally to reproduce.)',
       '',
-      'Fix the cause in this worktree, run the same checks locally until they pass, and commit. Once you finish, the card goes back through the checks and review, and the PR is updated with your commits.',
+      `Fix the cause on branch ${branch} in this worktree, run the same checks locally until they pass, and commit. Do not push: once you finish, the card goes back through the checks and human review, and Kodra pushes your commits to the PR.`,
     ].join('\n'),
   });
 }
@@ -301,7 +366,7 @@ export async function watchPullRequests(deps: HandlerDeps): Promise<boolean> {
   let changed = false;
   for (const issue of issues) {
     if (!issue.labels.includes('status:pr')) continue;
-    const branch = latestRunOf(deps, issue.number)?.branchName;
+    const branch = await resolveBranch(deps, issue.number);
     if (!branch) continue;
     let pr: PullRequestPayload | null;
     try {

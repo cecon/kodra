@@ -181,6 +181,6 @@ export function failureReport(gate: ReviewGatePayload): string {
     '',
     ...lines,
     '',
-    'Fix the cause of each failure in this worktree, run the same checks yourself until they pass, and commit. The checks run again when you finish.',
+    'Fix the cause of each failure in this worktree, run the same checks yourself until they pass, and commit. Do not push: Kodra pushes after human review. The checks run again when you finish.',
   ].join('\n');
 }
