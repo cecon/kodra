@@ -1,21 +1,20 @@
 import { KodraPulse } from '../KodraPulse.js';
-import { Logo } from '../Logo.js';
 import type { IssueRef } from '@kanbots/core';
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
-  type MouseEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { api } from '../../api.js';
 import { SessionDropdown, useActiveSessionId } from '../chat/SessionDropdown.js';
 import { ModelPicker, PROVIDER_LABELS, type ModelPickerValue } from '../forms/ModelPicker.js';
 import { useFetch } from '../../hooks/useFetch.js';
-import { useFocusTrap } from '../../hooks/useFocusTrap.js';
 import { useFocusedRepo } from '../../hooks/useFocusedRepo.js';
 import { useIssues, dispatchIssuesRefetch, ISSUES_CHANGED_CHANNEL } from '../../hooks/useIssues.js';
 import { useIssueRunStream } from '../../hooks/useIssueRunStream.js';
@@ -33,6 +32,27 @@ import { PreviewPanel, type PreviewInspectSelection } from '../run/PreviewPanel.
 import { RunSummary } from '../run/RunSummary.js';
 import { ToolUseCard } from '../run/ToolUseCard.js';
 import { CreatePrModal } from './CreatePrModal.js';
+import { ModalFrame } from './ModalFrame.js';
+import { priorityColor, tagColor } from '../board/boardStyle.js';
+import { alpha } from '@mui/material/styles';
+import Alert from '@mui/material/Alert';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import CircularProgress from '@mui/material/CircularProgress';
+import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
+import { IconButton, IconsaxIcon } from '@kanbots/ui';
+import { Add, CloseCircle } from 'iconsax-react';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { renderMarkdown } from '../../lib/markdown.js';
 import type {
   AgentEvent,
@@ -67,6 +87,25 @@ const TAB_LABELS: Record<DetailTab, string> = {
   runs: 'Runs',
 };
 type DetailTab = 'autopilot' | 'overview' | 'thread' | 'diff' | 'preview' | 'runs';
+
+const monoChipSx = { fontFamily: 'var(--ff-mono, monospace)' };
+
+function runStatusColor(
+  status: AgentRunStatus,
+): 'success' | 'warning' | 'error' | 'info' | 'secondary' {
+  switch (status) {
+    case 'running':
+      return 'success';
+    case 'awaiting_input':
+      return 'warning';
+    case 'failed':
+      return 'error';
+    case 'complete':
+      return 'info';
+    default:
+      return 'secondary';
+  }
+}
 
 const STATUS_LABEL: Record<AgentRunStatus, string> = {
   starting: 'STARTING',
@@ -149,7 +188,6 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
   const [viewedRunDetails, setViewedRunDetails] = useState<AgentRun | null>(null);
   const [stoppingRunId, setStoppingRunId] = useState<number | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
-  const modalRef = useFocusTrap<HTMLDivElement>(true);
   useEffect(() => {
     if (isAutopilot && tab !== 'autopilot' && tab !== 'thread') {
       // Default an autopilot card to its dedicated tab on load.
@@ -164,14 +202,6 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
     setViewedRunDetails(null);
     setStopError(null);
   }, [issueNumber]);
-
-  useEffect(() => {
-    function onKey(e: globalThis.KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   // Refetch this issue's detail whenever the main process signals a change.
   // Debounced so a burst of run-status flips collapses to one fetch.
@@ -194,10 +224,6 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
       }
     };
   }, [refetch]);
-
-  function stopInner(e: MouseEvent<HTMLDivElement>): void {
-    e.stopPropagation();
-  }
 
   const issue = data?.issue ?? null;
   const activeRun = data?.thread?.activeRun ?? null;
@@ -236,254 +262,119 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
     ? ['autopilot', 'overview']
     : ['overview', 'thread', 'diff', 'preview', 'runs'];
 
-  return (
-    <div className="kb-modal-scrim kb-app" onClick={onClose} role="dialog" aria-modal="true">
-      <div ref={modalRef} className="kb-modal" onClick={stopInner} tabIndex={-1}>
-        <div className="kb-modal-head">
-          <Logo size={11} withWordmark />
-          <span style={{ color: 'var(--ink-4)' }}>·</span>
-          <span className="num">#{issueNumber}</span>
-          <h2>{issue?.title ?? (loading ? 'Loading…' : 'Issue')}</h2>
-          <span className="grow" />
-          {isAutopilot && !isArchived ? (
-            <AutopilotStopButton issueNumber={issueNumber} onAfter={() => void refetch()} />
-          ) : null}
-          {!isAutopilot && activeRun && isRunning ? (
-            <>
-              <button
-                type="button"
-                className="kb-btn ghost"
-                disabled={stoppingRunId !== null}
-                onClick={() => void stopRun(activeRun.id)}
-              >
-                {stoppingRunId === activeRun.id ? 'Stopping…' : 'Stop'}
-              </button>
-              {stopError ? (
-                <span role="alert" style={{ color: 'var(--failed)', fontSize: 11 }}>
-                  {stopError}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-          {!isAutopilot ? (
-            <>
-              <button
-                type="button"
-                className="kb-btn ghost"
-                disabled={forking || displayRun === null}
-                onClick={() => {
-                  if (displayRun === null || forking) return;
-                  setForking(true);
-                  setForkError(null);
-                  void api
-                    .forkAgentRun(displayRun.id)
-                    .then(() => {
-                      setRunsRefreshKey((key) => key + 1);
-                      return refetch();
-                    })
-                    .catch((err: unknown) => {
-                      setForkError(err instanceof Error ? err.message : String(err));
-                    })
-                    .finally(() => setForking(false));
-                }}
-                title={displayRun === null ? 'No run to fork' : undefined}
-              >
-                {forking ? 'Forking…' : 'Fork run'}
-              </button>
-              {forkError ? (
-                <span role="alert" style={{ color: 'var(--failed)', fontSize: 11 }}>
-                  {forkError}
-                </span>
-              ) : null}
-            </>
-          ) : null}
-          {!isAutopilot && displayRun ? (
-            <button type="button" className="kb-btn primary" onClick={() => setTab('preview')}>
-              Open preview ↗
-            </button>
-          ) : null}
-          {isArchived ? (
-            <button
-              type="button"
-              className="kb-btn ghost"
+  const headerActions = (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mr: 1 }}>
+      {isAutopilot && !isArchived ? (
+        <AutopilotStopButton issueNumber={issueNumber} onAfter={() => void refetch()} />
+      ) : null}
+      {!isAutopilot && activeRun && isRunning ? (
+        <Button
+          size="small"
+          color="error"
+          variant="outlined"
+          disabled={stoppingRunId !== null}
+          onClick={() => void stopRun(activeRun.id)}
+        >
+          {stoppingRunId === activeRun.id ? 'Stopping…' : 'Stop'}
+        </Button>
+      ) : null}
+      {!isAutopilot ? (
+        <Tooltip title={displayRun === null ? 'No run to fork' : 'Start a new run from this one'}>
+          <span>
+            <Button
+              size="small"
+              color="secondary"
+              disabled={forking || displayRun === null}
               onClick={() => {
-                void api.unarchiveIssue(issueNumber).then(() => {
-                  dispatchIssuesRefetch();
-                  onClose();
-                });
-              }}
-              title="Restore this task to the board"
-            >
-              Unarchive
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="kb-btn ghost"
-              onClick={() => {
-                const msg = isAutopilot
-                  ? 'Archive this autopilot task? Its session will be stopped. Child tasks remain.'
-                  : isRunning
-                    ? 'Archive this ticket? Its running agent will be stopped.'
-                    : 'Archive this ticket?';
-                if (!window.confirm(msg)) return;
-                void api.archiveIssue(issueNumber).then(() => {
-                  dispatchIssuesRefetch();
-                  onClose();
-                });
+                if (displayRun === null || forking) return;
+                setForking(true);
+                setForkError(null);
+                void api
+                  .forkAgentRun(displayRun.id)
+                  .then(() => {
+                    setRunsRefreshKey((key) => key + 1);
+                    return refetch();
+                  })
+                  .catch((err: unknown) => {
+                    setForkError(err instanceof Error ? err.message : String(err));
+                  })
+                  .finally(() => setForking(false));
               }}
             >
-              Archive
-            </button>
-          )}
-          <button
-            type="button"
-            className="x-btn"
-            onClick={onClose}
-            aria-label="Close (Esc)"
-            title="Close"
+              {forking ? 'Forking…' : 'Fork run'}
+            </Button>
+          </span>
+        </Tooltip>
+      ) : null}
+      {!isAutopilot && displayRun ? (
+        <Button size="small" variant="contained" onClick={() => setTab('preview')}>
+          Open preview ↗
+        </Button>
+      ) : null}
+      {isArchived ? (
+        <Tooltip title="Restore this task to the board">
+          <Button
+            size="small"
+            color="secondary"
+            onClick={() => {
+              void api.unarchiveIssue(issueNumber).then(() => {
+                dispatchIssuesRefetch();
+                onClose();
+              });
+            }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M6 6l12 12M18 6l-12 12" />
-            </svg>
-          </button>
-        </div>
+            Unarchive
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button
+          size="small"
+          color="secondary"
+          onClick={() => {
+            const msg = isAutopilot
+              ? 'Archive this autopilot task? Its session will be stopped. Child tasks remain.'
+              : isRunning
+                ? 'Archive this ticket? Its running agent will be stopped.'
+                : 'Archive this ticket?';
+            if (!window.confirm(msg)) return;
+            void api.archiveIssue(issueNumber).then(() => {
+              dispatchIssuesRefetch();
+              onClose();
+            });
+          }}
+        >
+          Archive
+        </Button>
+      )}
+    </Stack>
+  );
 
-        <div className="kb-modal-body">
-          <main className="kb-modal-main">
-            {issue ? (
-              <>
-                <div className={`kb-tdm-hero${isRunning ? ' running' : ''}`}>
-                  <ParentBreadcrumb
-                    childNumber={issue.number}
-                    {...(onOpenDetail ? { onOpenDetail } : {})}
-                  />
-                  <div className="kb-tdm-title-row">
-                    <span className="kb-tdm-num">#{issue.number}</span>
-                    <h1 className="kb-tdm-h1">{issue.title}</h1>
-                  </div>
-                  <div className="kb-tdm-meta-row">
-                    {activeRun ? (
-                      <span
-                        className={`kb-status-pill kb-state-${
-                          activeRun.status === 'awaiting_input'
-                            ? 'awaiting'
-                            : activeRun.status === 'running'
-                              ? 'running'
-                              : activeRun.status === 'failed'
-                                ? 'failed'
-                                : ''
-                        }`}
-                      >
-                        <span className="kb-pulse" />
-                        {STATUS_LABEL[activeRun.status]} · run #{activeRun.id}
-                      </span>
-                    ) : null}
-                    {tagFromLabels(issue.labels, issue.isPullRequest) ? (
-                      <span
-                        className={`kb-tag kb-tag-${tagFromLabels(issue.labels, issue.isPullRequest)}`}
-                      >
-                        {tagFromLabels(issue.labels, issue.isPullRequest)}
-                      </span>
-                    ) : null}
-                    {areaLabels(issue.labels).map((l) => (
-                      <span key={l} className="kb-chip mono">
-                        {l}
-                      </span>
-                    ))}
-                    {priorityFromLabels(issue.labels) ? (
-                      <span className="kb-chip mono">
-                        priority:{priorityFromLabels(issue.labels)}
-                      </span>
-                    ) : null}
-                    {displayRun?.branchName ? (
-                      <span className="kb-chip mono">
-                        <span className="k">branch</span>
-                        {displayRun.branchName}
-                      </span>
-                    ) : null}
-                    <span className="kb-chip mono">
-                      <span className="k">opened</span>
-                      {ageString(issue.createdAt)} ago
-                    </span>
-                  </div>
-                </div>
+  const tag = issue ? tagFromLabels(issue.labels, issue.isPullRequest) : null;
+  const priority = issue ? priorityFromLabels(issue.labels) : null;
 
-                <div className="kb-tdm-tabs">
-                  {visibleTabs.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`kb-tdm-tab${tab === t ? ' active' : ''}`}
-                      onClick={() => setTab(t)}
-                    >
-                      {TAB_LABELS[t]}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="kb-tdm-content">
-                  {tab === 'autopilot' ? <AutopilotTab issueNumber={issue.number} /> : null}
-                  {tab === 'overview' ? (
-                    <OverviewTab
-                      issue={issue}
-                      displayRun={displayRun}
-                      cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
-                      {...(onOpenDetail ? { onOpenDetail } : {})}
-                    />
-                  ) : null}
-                  {tab === 'thread' && !isAutopilot ? (
-                    <ThreadTab
-                      activeRun={activeRun}
-                      displayRun={displayRun}
-                      cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
-                      runs={data?.thread?.runs}
-                      messages={messages}
-                      issueNumber={issueNumber}
-                      issueLabels={issue.labels}
-                      issueStatus={issue.status}
-                      onActionDone={() => void refetch()}
-                    />
-                  ) : null}
-                  {tab === 'diff' && !isAutopilot ? <DiffTabModal activeRun={displayRun} /> : null}
-                  {tab === 'preview' && !isAutopilot ? (
-                    <PreviewTabModal activeRun={displayRun} />
-                  ) : null}
-                  {tab === 'runs' && !isAutopilot ? (
-                    <RunsTab
-                      issueNumber={issue.number}
-                      refreshKey={runsRefreshKey}
-                      onViewRun={(run) => {
-                        setViewedRunId(run.id);
-                        setViewedRunDetails(run);
-                        setTab('thread');
-                      }}
-                    />
-                  ) : null}
-                </div>
-              </>
-            ) : error ? (
-              <div className="kb-tdm-content" style={{ color: 'var(--failed)' }}>
-                {error.message}
-              </div>
-            ) : (
-              <div className="kb-tdm-content">Loading…</div>
-            )}
-          </main>
-
-          <aside className="kb-modal-aside">
-            {issue ? <Aside issue={issue} activeRun={activeRun} latestRun={latestRun} /> : null}
-          </aside>
-        </div>
-
-        <div className="kb-modal-foot">
+  return (
+    <ModalFrame
+      title={
+        <>
+          <Box
+            component="span"
+            sx={{ color: 'text.secondary', fontFamily: 'var(--ff-mono, monospace)', mr: 1 }}
+          >
+            #{issueNumber}
+          </Box>
+          {issue?.title ?? (loading ? 'Loading…' : 'Issue')}
+        </>
+      }
+      ariaLabel={`Task #${issueNumber}`}
+      onClose={onClose}
+      width={1180}
+      fillBody
+      headerExtra={headerActions}
+      footer={
+        <Box
+          className="kb-app kb-modal-foot"
+          sx={{ width: '100%', border: 0, p: 0, bgcolor: 'transparent' }}
+        >
           <span className="hint">Reply to agent</span>
           <ReplyFooter
             issueNumber={issueNumber}
@@ -491,9 +382,155 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
             activeRun={activeRun}
             onSent={() => void refetch()}
           />
-        </div>
-      </div>
-    </div>
+        </Box>
+      }
+    >
+      <Box data-detail-scroller sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+        {forkError || stopError ? (
+          <Alert severity="error" sx={{ m: 2, mb: 0 }} role="alert">
+            {forkError ?? stopError}
+          </Alert>
+        ) : null}
+        {issue ? (
+          <>
+            <Box sx={{ px: 3, pt: 2.5, pb: 1.5 }}>
+              <ParentBreadcrumb
+                childNumber={issue.number}
+                {...(onOpenDetail ? { onOpenDetail } : {})}
+              />
+              <Stack direction="row" spacing={1.25} sx={{ alignItems: 'baseline', mb: 1.5 }}>
+                <Typography
+                  variant="h4"
+                  color="text.secondary"
+                  sx={{ fontFamily: 'var(--ff-mono, monospace)' }}
+                >
+                  #{issue.number}
+                </Typography>
+                <Typography variant="h3" component="h1" sx={{ wordBreak: 'break-word' }}>
+                  {issue.title}
+                </Typography>
+              </Stack>
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{ flexWrap: 'wrap', rowGap: 0.75, alignItems: 'center' }}
+              >
+                {activeRun ? (
+                  <Chip
+                    size="small"
+                    variant="light"
+                    color={runStatusColor(activeRun.status)}
+                    label={`${STATUS_LABEL[activeRun.status]} · run #${activeRun.id}`}
+                  />
+                ) : null}
+                {tag ? (
+                  <Chip size="small" variant="outlined" color={tagColor(tag)} label={tag} />
+                ) : null}
+                {areaLabels(issue.labels).map((l) => (
+                  <Chip key={l} size="small" variant="outlined" label={l} sx={monoChipSx} />
+                ))}
+                {priority ? (
+                  <Chip
+                    size="small"
+                    variant="light"
+                    color={priorityColor(priority)}
+                    label={`priority:${priority}`}
+                    sx={monoChipSx}
+                  />
+                ) : null}
+                {displayRun?.branchName ? (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`branch ${displayRun.branchName}`}
+                    sx={monoChipSx}
+                  />
+                ) : null}
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`opened ${ageString(issue.createdAt)} ago`}
+                  sx={monoChipSx}
+                />
+              </Stack>
+            </Box>
+
+            <Tabs
+              value={tab}
+              onChange={(_e, next: DetailTab) => setTab(next)}
+              sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
+            >
+              {visibleTabs.map((t) => (
+                <Tab key={t} value={t} label={TAB_LABELS[t]} />
+              ))}
+            </Tabs>
+
+            <div className="kb-tdm-content">
+              {tab === 'autopilot' ? <AutopilotTab issueNumber={issue.number} /> : null}
+              {tab === 'overview' ? (
+                <OverviewTab
+                  issue={issue}
+                  displayRun={displayRun}
+                  cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
+                  {...(onOpenDetail ? { onOpenDetail } : {})}
+                />
+              ) : null}
+              {tab === 'thread' && !isAutopilot ? (
+                <ThreadTab
+                  activeRun={activeRun}
+                  displayRun={displayRun}
+                  cloudRunId={issue.cloudLatestRunId ?? issue.activeRun?.cloudRunId ?? null}
+                  runs={data?.thread?.runs}
+                  messages={messages}
+                  issueNumber={issueNumber}
+                  issueLabels={issue.labels}
+                  issueStatus={issue.status}
+                  onActionDone={() => void refetch()}
+                />
+              ) : null}
+              {tab === 'diff' && !isAutopilot ? <DiffTabModal activeRun={displayRun} /> : null}
+              {tab === 'preview' && !isAutopilot ? (
+                <PreviewTabModal activeRun={displayRun} />
+              ) : null}
+              {tab === 'runs' && !isAutopilot ? (
+                <RunsTab
+                  issueNumber={issue.number}
+                  refreshKey={runsRefreshKey}
+                  onViewRun={(run) => {
+                    setViewedRunId(run.id);
+                    setViewedRunDetails(run);
+                    setTab('thread');
+                  }}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : error ? (
+          <Alert severity="error" sx={{ m: 3 }}>
+            {error.message}
+          </Alert>
+        ) : (
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', p: 3 }}>
+            <CircularProgress size={18} />
+            <Typography color="text.secondary">Loading…</Typography>
+          </Stack>
+        )}
+      </Box>
+
+      <Box
+        component="aside"
+        sx={{
+          width: 320,
+          flexShrink: 0,
+          overflowY: 'auto',
+          borderLeft: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.default',
+        }}
+      >
+        {issue ? <Aside issue={issue} activeRun={activeRun} latestRun={latestRun} /> : null}
+      </Box>
+    </ModalFrame>
   );
 }
 
@@ -889,6 +926,52 @@ function ReplyFooter({
   );
 }
 
+function AsideSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="div"
+        sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, mb: 1.25 }}
+      >
+        {title}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+function AsideRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{ justifyContent: 'space-between', py: 0.5, minWidth: 0 }}
+    >
+      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Typography
+        variant="body2"
+        noWrap
+        sx={{ minWidth: 0, textAlign: 'right', ...(mono && monoChipSx) }}
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </Typography>
+    </Stack>
+  );
+}
+
 function Aside({
   issue,
   activeRun,
@@ -903,74 +986,42 @@ function Aside({
   const sidebarHeader = activeRun ? 'Live run' : latestRun ? 'Last run' : 'Run';
   return (
     <>
-      <div className="kb-mas-block">
-        <div className="kb-mas-h">{sidebarHeader}</div>
+      <AsideSection title={sidebarHeader}>
         {sidebarRun ? (
           <RunSummary run={sidebarRun} layout="aside" />
         ) : (
-          <div className="kb-desc-md" style={{ color: 'var(--ink-3)', fontSize: 12 }}>
+          <Typography variant="body2" color="text.secondary">
             No agent runs yet.
-          </div>
+          </Typography>
         )}
-      </div>
+      </AsideSection>
 
-      <div className="kb-mas-block">
-        <div className="kb-mas-h">Properties</div>
-        <div className="kb-mas-row">
-          <span className="k">Status</span>
-          <span className="v">{issue.status ?? 'inbox'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Assignee</span>
-          <span className="v">{issue.assignees[0] ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Priority</span>
-          <span className="v">{priorityFromLabels(issue.labels) ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Folder</span>
-          <span className="v mono">current</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Worktree</span>
-          <span className="v mono">{sidebarRun?.worktreePath ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Branch</span>
-          <span className="v mono">{sidebarRun?.branchName ?? '—'}</span>
-        </div>
-        <div className="kb-mas-row">
-          <span className="k">Base</span>
-          <span className="v mono">{sidebarRun?.baseBranch ?? '—'}</span>
-        </div>
-      </div>
+      <AsideSection title="Properties">
+        <AsideRow label="Status" value={issue.status ?? 'inbox'} />
+        <AsideRow label="Assignee" value={issue.assignees[0] ?? '—'} />
+        <AsideRow label="Priority" value={priorityFromLabels(issue.labels) ?? '—'} />
+        <AsideRow label="Folder" value="current" mono />
+        <AsideRow label="Worktree" value={sidebarRun?.worktreePath ?? '—'} mono />
+        <AsideRow label="Branch" value={sidebarRun?.branchName ?? '—'} mono />
+        <AsideRow label="Base" value={sidebarRun?.baseBranch ?? '—'} mono />
+      </AsideSection>
 
       {links.length > 0 ? (
-        <div className="kb-mas-block">
-          <div className="kb-mas-h">Linked</div>
+        <AsideSection title="Linked">
           <LinkedIssues numbers={links} currentNumber={issue.number} />
-        </div>
+        </AsideSection>
       ) : null}
 
-      <div className="kb-mas-block">
-        <div className="kb-mas-h">Author</div>
-        <div className="kb-mas-row">
-          <span
-            className="kb-rail-avatar"
-            style={{
-              width: 22,
-              height: 22,
-              fontSize: 10,
-              background: colorForLogin(issue.user.login),
-            }}
-            aria-hidden
+      <AsideSection title="Author">
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Avatar
+            sx={{ width: 24, height: 24, fontSize: 11, bgcolor: colorForLogin(issue.user.login) }}
           >
             {issue.user.login.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="v">{issue.user.login}</span>
-        </div>
-      </div>
+          </Avatar>
+          <Typography variant="body2">{issue.user.login}</Typography>
+        </Stack>
+      </AsideSection>
     </>
   );
 }
@@ -984,55 +1035,43 @@ function LinkedIssues({
 }) {
   const { issues } = useIssues();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <Stack spacing={0.75}>
       {numbers
         .filter((n) => String(n) !== String(currentNumber))
         .map((n) => {
           const linked = issues.find((i) => String(i.number) === String(n));
           return (
-            <a
+            <Box
               key={String(n)}
+              component="a"
               href={`#/issue/${n}`}
-              style={{
+              sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
-                fontSize: 12,
-                padding: '6px 8px',
-                borderRadius: 6,
-                background: 'var(--bg-2)',
-                border: '1px solid var(--hairline-soft)',
-                textDecoration: 'none',
+                gap: 1,
+                px: 1,
+                py: 0.75,
+                borderRadius: 1,
+                border: 1,
+                borderColor: 'divider',
                 color: 'inherit',
+                textDecoration: 'none',
+                '&:hover': { borderColor: 'primary.main' },
               }}
             >
-              <span
-                style={{
-                  fontFamily: 'var(--ff-mono)',
-                  fontSize: 11,
-                  color: 'var(--ink-3)',
-                }}
-              >
+              <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
                 #{n}
-              </span>
-              <span
-                style={{
-                  flex: 1,
-                  color: 'var(--ink-1)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              </Typography>
+              <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
                 {linked?.title ?? '(not loaded)'}
-              </span>
+              </Typography>
               {linked?.state === 'closed' ? (
-                <span style={{ color: 'var(--review)', fontSize: 10 }}>closed</span>
+                <Chip size="small" variant="light" color="info" label="closed" />
               ) : null}
-            </a>
+            </Box>
           );
         })}
-    </div>
+    </Stack>
   );
 }
 
@@ -1074,44 +1113,59 @@ function ParentBreadcrumb({
   if (loading || parents.length === 0) return null;
 
   return (
-    <div className="kb-sub-issues-parent">
+    <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
       {parents.map((p) => (
-        <button
+        <Button
           key={p.id}
-          type="button"
-          className="kb-sub-issues-parent-link"
+          size="small"
+          color="secondary"
           onClick={() => onOpenDetail?.(p.child.number)}
           disabled={!onOpenDetail}
           title={`Open parent #${p.child.number}`}
+          sx={{ px: 1, minWidth: 0, textTransform: 'none' }}
         >
-          <span className="kb-sub-issues-parent-label">Parent</span>
-          <span className="kb-sub-issues-parent-num">#{p.child.number}</span>
-          <span className="kb-sub-issues-parent-title">{p.child.title}</span>
-        </button>
+          <Box component="span" sx={{ color: 'text.secondary', mr: 0.75 }}>
+            Parent
+          </Box>
+          <Box component="span" sx={{ ...monoChipSx, mr: 0.75 }}>
+            #{p.child.number}
+          </Box>
+          {p.child.title}
+        </Button>
       ))}
-    </div>
+    </Stack>
   );
 }
 
-function statusBadge(status: StatusKey | null): { label: string; cls: string } {
-  // Mirrors the status pill conventions used elsewhere — kept inline to
-  // avoid pulling another file in just for the colour map. The labels
-  // here are short forms suitable for a tight list row.
+function statusBadge(status: StatusKey | null): {
+  label: string;
+  color: 'secondary' | 'primary' | 'success' | 'info';
+} {
+  // Short forms suitable for a tight list row.
   switch (status) {
     case 'backlog':
-      return { label: 'backlog', cls: 'kb-sub-issue-status-backlog' };
+      return { label: 'backlog', color: 'secondary' };
     case 'todo':
-      return { label: 'todo', cls: 'kb-sub-issue-status-todo' };
+      return { label: 'todo', color: 'primary' };
     case 'inProgress':
-      return { label: 'in progress', cls: 'kb-sub-issue-status-running' };
+      return { label: 'in progress', color: 'success' };
     case 'review':
-      return { label: 'review', cls: 'kb-sub-issue-status-review' };
+      return { label: 'review', color: 'info' };
     case 'done':
-      return { label: 'done', cls: 'kb-sub-issue-status-done' };
+      return { label: 'done', color: 'success' };
     default:
-      return { label: 'inbox', cls: 'kb-sub-issue-status-inbox' };
+      return { label: 'inbox', color: 'secondary' };
   }
 }
+
+/** The bordered surface used for markdown, descriptions and list rows. */
+const panelSx = {
+  p: 2,
+  borderRadius: 1,
+  border: 1,
+  borderColor: 'divider',
+  bgcolor: 'background.default',
+};
 
 /**
  * Renders the list of child sub-issues for `parentNumber` plus an
@@ -1176,68 +1230,87 @@ function SubIssuesSection({
   }
 
   return (
-    <div className="kb-tdm-section kb-sub-issues">
-      <h3>Sub-issues</h3>
-      {error ? (
-        <div className="kb-sub-issues-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {loading ? (
-        <div className="kb-sub-issues-empty">Loading…</div>
-      ) : children.length === 0 && !adding ? (
-        <div className="kb-sub-issues-empty">No sub-issues yet.</div>
-      ) : (
-        <div className="kb-sub-issues-list">
-          {children.map((rel) => {
+    <TabSection title="Sub-issues">
+      <Stack spacing={1}>
+        {error ? (
+          <Alert severity="error" role="alert">
+            {error}
+          </Alert>
+        ) : null}
+        {loading ? (
+          <Typography variant="body2" color="text.secondary">
+            Loading…
+          </Typography>
+        ) : children.length === 0 && !adding ? (
+          <Typography variant="body2" color="text.secondary">
+            No sub-issues yet.
+          </Typography>
+        ) : (
+          children.map((rel) => {
             const badge = statusBadge(rel.child.status);
             return (
-              <div key={rel.id} className="kb-sub-issue-row">
-                <span className={`kb-sub-issue-pill ${badge.cls}`}>{badge.label}</span>
-                <button
-                  type="button"
-                  className="kb-sub-issue-open"
+              <Stack key={rel.id} direction="row" spacing={1} sx={{ ...rowSx, py: 0.5, pr: 0.5 }}>
+                <Chip size="small" variant="light" color={badge.color} label={badge.label} />
+                <Button
+                  color="inherit"
                   onClick={() => onOpenDetail?.(rel.child.number)}
                   disabled={!onOpenDetail}
                   title={`Open #${rel.child.number}`}
+                  sx={{ flex: 1, minWidth: 0, justifyContent: 'flex-start', textTransform: 'none' }}
                 >
-                  <span className="kb-sub-issue-num">#{rel.child.number}</span>
-                  <span className="kb-sub-issue-title">{rel.child.title}</span>
-                </button>
+                  <Box component="span" sx={{ ...monoChipSx, color: 'text.secondary', mr: 1 }}>
+                    #{rel.child.number}
+                  </Box>
+                  <Box
+                    component="span"
+                    sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {rel.child.title}
+                  </Box>
+                </Button>
                 {rel.child.state === 'closed' ? (
-                  <span className="kb-sub-issue-closed">closed</span>
+                  <Chip size="small" variant="light" color="info" label="closed" />
                 ) : null}
-                <button
-                  type="button"
-                  className="kb-sub-issue-unlink"
-                  onClick={() => void handleRemove(rel.id)}
-                  title="Unlink (the issue is not deleted)"
-                  aria-label={`Unlink #${rel.child.number}`}
-                >
-                  ×
-                </button>
-              </div>
+                <Tooltip title="Unlink (the issue is not deleted)">
+                  <IconButton
+                    size="small"
+                    color="secondary"
+                    onClick={() => void handleRemove(rel.id)}
+                    aria-label={`Unlink #${rel.child.number}`}
+                  >
+                    <IconsaxIcon icon={CloseCircle} size={16} />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
             );
-          })}
-        </div>
-      )}
-      {adding ? (
-        <SubIssueAddPicker
-          parentNumber={parentNumber}
-          existing={new Set(children.map((c) => c.child.number))}
-          allIssues={allIssues}
-          onPick={(n) => void handleAdd(n)}
-          onCancel={() => {
-            setAdding(false);
-            setError(null);
-          }}
-        />
-      ) : (
-        <button type="button" className="kb-sub-issue-add" onClick={() => setAdding(true)}>
-          + Add sub-issue
-        </button>
-      )}
-    </div>
+          })
+        )}
+        {adding ? (
+          <SubIssueAddPicker
+            parentNumber={parentNumber}
+            existing={new Set(children.map((c) => c.child.number))}
+            allIssues={allIssues}
+            onPick={(n) => void handleAdd(n)}
+            onCancel={() => {
+              setAdding(false);
+              setError(null);
+            }}
+          />
+        ) : (
+          <Box>
+            <Button
+              size="small"
+              color="secondary"
+              variant="outlined"
+              startIcon={<IconsaxIcon icon={Add} size={16} />}
+              onClick={() => setAdding(true)}
+            >
+              Add sub-issue
+            </Button>
+          </Box>
+        )}
+      </Stack>
+    </TabSection>
   );
 }
 
@@ -1274,7 +1347,7 @@ function SubIssueAddPicker({
     const q = query.trim().toLowerCase();
     const filtered = allIssues.filter((i) => {
       if (String(i.number) === String(parentNumber)) return false;
-      if (![...existing].some((n) => String(n) === String(i.number))) return false;
+      if ([...existing].some((n) => String(n) === String(i.number))) return false;
       if (!q) return true;
       const numStr = `#${i.number}`;
       return (
@@ -1285,38 +1358,42 @@ function SubIssueAddPicker({
   }, [allIssues, query, parentNumber, existing]);
 
   return (
-    <div className="kb-sub-issue-picker">
-      <div className="kb-sub-issue-picker-row">
-        <input
-          type="text"
-          className="kb-input kb-sub-issue-input"
+    <Box sx={panelSx}>
+      <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+        <TextField
+          size="small"
+          fullWidth
           placeholder="Search by # or title…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
         />
-        <button type="button" className="kb-btn ghost" onClick={onCancel}>
+        <Button color="secondary" onClick={onCancel}>
           Cancel
-        </button>
-      </div>
-      <div className="kb-sub-issue-matches">
-        {matches.length === 0 ? (
-          <div className="kb-sub-issues-empty">No matches.</div>
-        ) : (
-          matches.map((i) => (
-            <button
+        </Button>
+      </Stack>
+      {matches.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No matches.
+        </Typography>
+      ) : (
+        <Stack>
+          {matches.map((i) => (
+            <Button
               key={String(i.number)}
-              type="button"
-              className="kb-sub-issue-match"
+              color="inherit"
               onClick={() => onPick(i.number)}
+              sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
             >
-              <span className="kb-sub-issue-num">#{i.number}</span>
-              <span className="kb-sub-issue-title">{i.title}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
+              <Box component="span" sx={{ ...monoChipSx, color: 'text.secondary', mr: 1 }}>
+                #{i.number}
+              </Box>
+              {i.title}
+            </Button>
+          ))}
+        </Stack>
+      )}
+    </Box>
   );
 }
 
@@ -1351,69 +1428,60 @@ function OverviewTab({
       {issue.sentryMeta ? <SentryAnalysisSection issue={issue} /> : null}
       <AgentSessionSection run={displayRun} />
 
-      <div className="kb-tdm-section">
-        <h3>Description</h3>
-        <div className="kb-desc-md">{issue.body || '(no description)'}</div>
-      </div>
+      <TabSection title="Description">
+        <Typography
+          variant="body2"
+          component="div"
+          sx={{ ...panelSx, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}
+        >
+          {issue.body || '(no description)'}
+        </Typography>
+      </TabSection>
 
       <SubIssuesSection parentNumber={issue.number} {...(onOpenDetail ? { onOpenDetail } : {})} />
 
       {savedSpec?.content !== null && savedSpec?.content !== undefined ? (
-        <div className="kb-tdm-section">
-          <h3>Spec</h3>
-          <div
+        <TabSection title="Spec">
+          <Box
             className="kb-desc-md"
+            sx={panelSx}
             dangerouslySetInnerHTML={{ __html: renderMarkdown(savedSpec.content) }}
           />
-        </div>
+        </TabSection>
       ) : null}
 
       {acItems.length > 0 ? (
-        <div className="kb-tdm-section">
-          <h3>Spec — extracted from AC: block</h3>
-          <ul
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-            }}
-          >
+        <TabSection title="Spec — extracted from AC: block">
+          <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', p: 0, m: 0 }}>
             {acItems.map((item, i) => (
-              <li
+              <Stack
+                component="li"
                 key={i}
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  padding: '5px 0',
-                  fontSize: 12.5,
-                  color: 'var(--ink-1)',
-                }}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'flex-start' }}
               >
-                <span
-                  style={{
-                    width: 13,
-                    height: 13,
-                    borderRadius: 3,
-                    border: '1px solid var(--hairline)',
-                    background: 'var(--bg-2)',
-                    flexShrink: 0,
-                    marginTop: 2,
-                  }}
+                <Box
                   aria-hidden
+                  sx={{
+                    width: 14,
+                    height: 14,
+                    mt: 0.4,
+                    borderRadius: 0.5,
+                    border: 1,
+                    borderColor: 'divider',
+                    flexShrink: 0,
+                  }}
                 />
-                {item}
-              </li>
+                <Typography variant="body2">{item}</Typography>
+              </Stack>
             ))}
-          </ul>
-        </div>
+          </Stack>
+        </TabSection>
       ) : null}
 
       {recentToolCalls.length > 0 ? (
-        <div className="kb-tdm-section">
-          <h3>What the agent did just now</h3>
+        <TabSection title="What the agent did just now">
           {recentToolCalls.map((ev) => (
             <ToolUseCard
               key={ev.id}
@@ -1422,7 +1490,7 @@ function OverviewTab({
               isLive={false}
             />
           ))}
-        </div>
+        </TabSection>
       ) : null}
     </>
   );
@@ -1450,29 +1518,38 @@ function AgentSessionSection({ run }: { run: AgentRun | null }) {
   }
 
   return (
-    <div className="kb-tdm-section">
-      <h3>Agent session</h3>
-      <div className="kb-tdm-session-row">
-        <span className="kb-chip mono">{providerLabel}</span>
-        <span className="kb-chip mono kb-tdm-session-chip" title={run.sessionId}>
-          <span className="kb-tdm-session-id">{run.sessionId}</span>
-        </span>
-        <button
-          type="button"
-          className="kb-btn ghost"
+    <TabSection title="Agent session">
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+        <Chip size="small" variant="outlined" label={providerLabel} />
+        <Tooltip title={run.sessionId}>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={run.sessionId}
+            sx={{ ...monoChipSx, maxWidth: 360 }}
+          />
+        </Tooltip>
+        <Button
+          size="small"
+          color={copyOk ? 'success' : 'secondary'}
           onClick={() => void copySession()}
-          title={copyOk ? 'Copied!' : hasResumeCommand ? 'Copy resume command' : 'Copy session ID'}
           aria-label={hasResumeCommand ? 'Copy resume command' : 'Copy session ID'}
         >
           {copyOk ? 'Copied' : hasResumeCommand ? 'Copy command' : 'Copy ID'}
-        </button>
-      </div>
-      <div className="kb-tdm-session-hint">
+        </Button>
+      </Stack>
+      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.75 }}>
         {hasResumeCommand ? 'Resume this session in your terminal' : 'Provider-specific session ID'}
-      </div>
-    </div>
+      </Typography>
+    </TabSection>
   );
 }
+
+const SENTRY_STATUS_LABEL: Record<string, string> = {
+  analyzed: 'analyzed',
+  applied: 'applied',
+  upstream_resolved: 'upstream resolved',
+};
 
 function SentryAnalysisSection({ issue }: { issue: IssueDetailPayload['issue'] }) {
   const meta = issue.sentryMeta;
@@ -1513,93 +1590,117 @@ function SentryAnalysisSection({ issue }: { issue: IssueDetailPayload['issue'] }
   }
 
   return (
-    <div className="kb-tdm-section kb-sentry-section">
-      <h3>
-        Sentry{' '}
-        <span className="kb-sentry-section-status" data-status={meta.status}>
-          {meta.status === 'analyzed'
-            ? 'analyzed'
-            : meta.status === 'applied'
-              ? 'applied'
-              : meta.status === 'upstream_resolved'
-                ? 'upstream resolved'
-                : 'unreviewed'}
-        </span>
-      </h3>
-      <div className="kb-sentry-section-meta">
+    <TabSection
+      title="Sentry"
+      action={
+        <Chip
+          size="small"
+          variant="light"
+          color={meta.status === 'imported' ? 'error' : 'secondary'}
+          label={SENTRY_STATUS_LABEL[meta.status] ?? 'unreviewed'}
+        />
+      }
+    >
+      <Stack spacing={1.25}>
         {meta.errorType ? (
-          <code>
+          <Box component="code" sx={{ ...panelSx, ...monoChipSx, p: 1.25, fontSize: 12 }}>
             {meta.errorType}: {meta.errorValue ?? ''}
-          </code>
+          </Box>
         ) : null}
-        <div className="kb-sentry-section-row">
-          <span>Occurrences: {meta.count}</span>
-          {meta.culprit ? <span>Where: {meta.culprit}</span> : null}
-          {meta.permalink ? (
-            <a href={meta.permalink} target="_blank" rel="noreferrer noopener">
-              View in Sentry ↗
-            </a>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary">
+            Occurrences: {meta.count}
+          </Typography>
+          {meta.culprit ? (
+            <Typography variant="body2" color="text.secondary">
+              Where: {meta.culprit}
+            </Typography>
           ) : null}
-        </div>
-      </div>
-
-      {error ? <div className="kb-sentry-error">{error}</div> : null}
-
-      {suggestion ? (
-        <div className="kb-sentry-suggestion">
-          <div className="kb-sentry-suggestion-head">
-            <span
-              className={`kb-sentry-verdict kb-sentry-verdict-${suggestion.verdict}`}
-              title={`Confidence: ${suggestion.confidence} · Category: ${suggestion.category}`}
+          {meta.permalink ? (
+            <Typography
+              variant="body2"
+              component="a"
+              href={meta.permalink}
+              target="_blank"
+              rel="noreferrer noopener"
+              sx={{ color: 'primary.main' }}
             >
-              {suggestion.verdict === 'task' ? 'Recommend converting to task' : 'Likely skippable'}
-            </span>
-            <span className="kb-sentry-confidence">
-              {suggestion.confidence} confidence · {suggestion.category}
-            </span>
-          </div>
-          <p className="kb-sentry-reasoning">{suggestion.reasoning}</p>
-          <div className="kb-sentry-suggestion-fields">
-            <div>
+              View in Sentry ↗
+            </Typography>
+          ) : null}
+        </Stack>
+
+        {error ? <Alert severity="error">{error}</Alert> : null}
+
+        {suggestion ? (
+          <Box sx={panelSx}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+              <Tooltip
+                title={`Confidence: ${suggestion.confidence} · Category: ${suggestion.category}`}
+              >
+                <Chip
+                  size="small"
+                  variant="light"
+                  color={suggestion.verdict === 'task' ? 'warning' : 'secondary'}
+                  label={
+                    suggestion.verdict === 'task'
+                      ? 'Recommend converting to task'
+                      : 'Likely skippable'
+                  }
+                />
+              </Tooltip>
+              <Typography variant="caption" color="text.secondary">
+                {suggestion.confidence} confidence · {suggestion.category}
+              </Typography>
+            </Stack>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {suggestion.reasoning}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
               <strong>Suggested title:</strong> {suggestion.suggestedTitle}
-            </div>
+            </Typography>
             <details>
               <summary>Suggested body</summary>
-              <pre className="kb-sentry-body-preview">{suggestion.suggestedBody}</pre>
+              <Box
+                component="pre"
+                sx={{ ...monoChipSx, whiteSpace: 'pre-wrap', fontSize: 12, mt: 1, mb: 0 }}
+              >
+                {suggestion.suggestedBody}
+              </Box>
             </details>
-          </div>
-          <div className="kb-sentry-suggestion-actions">
-            <button
-              type="button"
-              className="kb-btn primary"
-              onClick={() => void handleApply()}
-              disabled={applying || meta.status === 'applied'}
-            >
-              {meta.status === 'applied' ? 'Applied' : applying ? 'Applying…' : 'Convert to task'}
-            </button>
-            <button
-              type="button"
-              className="kb-btn ghost"
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => void handleApply()}
+                disabled={applying || meta.status === 'applied'}
+              >
+                {meta.status === 'applied' ? 'Applied' : applying ? 'Applying…' : 'Convert to task'}
+              </Button>
+              <Button
+                size="small"
+                color="secondary"
+                onClick={() => void handleAnalyze()}
+                disabled={analyzing}
+              >
+                {analyzing ? 'Re-analyzing…' : 'Re-analyze'}
+              </Button>
+            </Stack>
+          </Box>
+        ) : (
+          <Box>
+            <Button
+              size="small"
+              variant="contained"
               onClick={() => void handleAnalyze()}
               disabled={analyzing}
             >
-              {analyzing ? 'Re-analyzing…' : 'Re-analyze'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="kb-sentry-suggestion-actions">
-          <button
-            type="button"
-            className="kb-btn primary"
-            onClick={() => void handleAnalyze()}
-            disabled={analyzing}
-          >
-            {analyzing ? 'Analyzing…' : 'Analyze'}
-          </button>
-        </div>
-      )}
-    </div>
+              {analyzing ? 'Analyzing…' : 'Analyze'}
+            </Button>
+          </Box>
+        )}
+      </Stack>
+    </TabSection>
   );
 }
 
@@ -1700,76 +1801,67 @@ function ThreadTab({
   const sectionRef = useRef<HTMLDivElement | null>(null);
   useStickToBottom(sectionRef, [items.length, stream.events.length, isRunning]);
 
-  if (items.length === 0 && !isRunning) {
-    return (
-      <>
-        <div className="kb-tdm-section" ref={sectionRef}>
-          <h3>Agent thread</h3>
-          <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-            No agent activity yet. Reply below to start the conversation.
-          </div>
-        </div>
-        <PrCommentsSection issueNumber={issueNumber} />
-      </>
-    );
-  }
+  const runNote = displayRun ? (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <Typography variant="caption" color="text.secondary">
+        run #{displayRun.id} · {STATUS_LABEL[displayRun.status]}
+        {isLive ? '' : ` · ended ${ageString(displayRun.endedAt ?? displayRun.startedAt)} ago`}
+      </Typography>
+      {displayRun.status === 'running' || displayRun.status === 'starting' ? (
+        <KodraPulse tone="mint" />
+      ) : null}
+    </Stack>
+  ) : null;
 
   return (
     <>
-      <div className="kb-tdm-section" ref={sectionRef}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>Agent thread</h3>
-          {displayRun ? (
-            <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-              run #{displayRun.id} · {STATUS_LABEL[displayRun.status]}
-              {isLive
-                ? ''
-                : ` · ended ${ageString(displayRun.endedAt ?? displayRun.startedAt)} ago`}
-            </span>
-          ) : null}
-          {displayRun != null &&
-          (displayRun.status === 'running' || displayRun.status === 'starting') ? (
-            <KodraPulse tone="mint" style={{ alignSelf: 'center' }} />
-          ) : null}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {items.map((it) =>
-            it.kind === 'message' ? (
-              <MessageRow
-                key={it.id}
-                message={it.message}
-                cards={it.cards}
-                agentLabel={labelForMessage(it.message)}
-              />
-            ) : it.event.type === 'tool_use' ? (
-              <ToolUseCard
-                key={it.id}
-                toolUse={it.event}
-                result={resultByToolUseId.get(toolUseIdOf(it.event)) ?? null}
-                isLive={isLive}
-              />
-            ) : (
-              <EventRow key={it.id} event={it.event} agentLabel={agentLabel} />
-            ),
+      <Box ref={sectionRef}>
+        <TabSection title="Agent thread" action={runNote}>
+          {items.length === 0 && !isRunning ? (
+            <Typography variant="body2" color="text.secondary">
+              No agent activity yet. Reply below to start the conversation.
+            </Typography>
+          ) : (
+            <Stack spacing={1.25}>
+              {items.map((it) =>
+                it.kind === 'message' ? (
+                  <MessageRow
+                    key={it.id}
+                    message={it.message}
+                    cards={it.cards}
+                    agentLabel={labelForMessage(it.message)}
+                  />
+                ) : it.event.type === 'tool_use' ? (
+                  <ToolUseCard
+                    key={it.id}
+                    toolUse={it.event}
+                    result={resultByToolUseId.get(toolUseIdOf(it.event)) ?? null}
+                    isLive={isLive}
+                  />
+                ) : (
+                  <EventRow key={it.id} event={it.event} agentLabel={agentLabel} />
+                ),
+              )}
+              {isRunning && displayRun ? (
+                <AgentSpinner
+                  seed={displayRun.id}
+                  startedAt={displayRun.startedAt}
+                  tokensOut={displayRun.tokenUsageOutput ?? null}
+                />
+              ) : null}
+              {displayRun && displayRun.status === 'complete' ? (
+                <CompletionActions
+                  runId={displayRun.id}
+                  issueNumber={issueNumber}
+                  issueLabels={issueLabels}
+                  issueStatus={issueStatus}
+                  onChanged={onActionDone}
+                />
+              ) : null}
+            </Stack>
           )}
-          {isRunning && displayRun ? (
-            <AgentSpinner
-              seed={displayRun.id}
-              startedAt={displayRun.startedAt}
-              tokensOut={displayRun.tokenUsageOutput ?? null}
-            />
-          ) : null}
-          {displayRun && displayRun.status === 'complete' ? (
-            <CompletionActions
-              runId={displayRun.id}
-              issueNumber={issueNumber}
-              issueLabels={issueLabels}
-              issueStatus={issueStatus}
-              onChanged={onActionDone}
-            />
-          ) : null}
-        </div>
-      </div>
+        </TabSection>
+      </Box>
       <PrCommentsSection issueNumber={issueNumber} />
     </>
   );
@@ -1851,70 +1943,65 @@ function PrCommentsSection({ issueNumber }: { issueNumber: IssueRef }) {
   const conversationComments = comments.filter((c) => !c.inline);
 
   return (
-    <div className="kb-pr-comments">
-      <div className="kb-pr-comments-head">
-        <GitHubGlyph />
-        <span>PR review</span>
-        {data?.linkedPullNumber !== undefined && data.linkedPullNumber !== null ? (
-          <a
+    <TabSection
+      title="PR review"
+      action={
+        data?.linkedPullNumber !== undefined && data.linkedPullNumber !== null ? (
+          <Stack
+            direction="row"
+            spacing={0.75}
+            component="a"
             href={data.linkedPullHtmlUrl ?? '#'}
             target="_blank"
             rel="noreferrer noopener"
-            style={{ color: 'var(--ink-3)', marginLeft: 4 }}
+            sx={{ alignItems: 'center', color: 'text.secondary', textDecoration: 'none' }}
           >
-            #{data.linkedPullNumber}
-          </a>
+            <GitHubGlyph />
+            <Typography variant="caption">#{data.linkedPullNumber}</Typography>
+          </Stack>
+        ) : null
+      }
+    >
+      <Stack spacing={1.25}>
+        {error ? <Alert severity="error">{error}</Alert> : null}
+        {comments.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No comments on the PR yet.
+          </Typography>
         ) : null}
-      </div>
-      {error ? (
-        <div style={{ color: 'var(--failed)', fontSize: 12, marginBottom: 8 }}>{error}</div>
-      ) : null}
-      {comments.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 8 }}>
-          No comments on the PR yet.
-        </div>
-      ) : null}
-      {conversationComments.map((c) => (
-        <PrCommentRow key={`c${c.id}`} comment={c} />
-      ))}
-      {inlineGroups.map((group) => (
-        <div key={`g:${group.filePath}`}>
-          <div className="kb-pr-comment-file">{group.filePath}</div>
-          {group.comments.map((c) => (
-            <PrCommentRow key={`i${c.id}`} comment={c} />
-          ))}
-        </div>
-      ))}
-      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <textarea
+        {conversationComments.map((c) => (
+          <PrCommentRow key={`c${c.id}`} comment={c} />
+        ))}
+        {inlineGroups.map((group) => (
+          <Stack key={`g:${group.filePath}`} spacing={1}>
+            <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
+              {group.filePath}
+            </Typography>
+            {group.comments.map((c) => (
+              <PrCommentRow key={`i${c.id}`} comment={c} />
+            ))}
+          </Stack>
+        ))}
+        <TextField
+          multiline
+          minRows={2}
+          size="small"
           value={replyBody}
           onChange={(e) => setReplyBody(e.target.value)}
           placeholder="Reply on the PR…"
-          rows={2}
-          style={{
-            background: 'var(--bg-1)',
-            border: '1px solid var(--hairline)',
-            borderRadius: 8,
-            padding: '6px 9px',
-            fontSize: 12.5,
-            color: 'var(--ink-1)',
-            outline: 'none',
-            fontFamily: 'inherit',
-            resize: 'vertical',
-          }}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            className="kb-btn ghost"
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            size="small"
+            variant="outlined"
             disabled={posting || replyBody.trim().length === 0}
             onClick={() => void onSubmitReply()}
           >
             {posting ? 'Posting…' : 'Reply on PR'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Box>
+      </Stack>
+    </TabSection>
   );
 }
 
@@ -1939,47 +2026,37 @@ function groupInlineComments(comments: ReadonlyArray<PrCommentPayload>): InlineC
 
 function PrCommentRow({ comment }: { comment: PrCommentPayload }) {
   const login = comment.author.login;
-  const initials = login.slice(0, 2).toUpperCase();
-  const tone = colorForLogin(login);
   return (
-    <div className="kb-pr-comment">
-      {comment.author.avatarUrl ? (
-        <img className="kb-pr-comment-avatar" src={comment.author.avatarUrl} alt={login} />
-      ) : (
-        <span
-          className="kb-pr-comment-avatar"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: tone,
-            color: 'var(--bg-1)',
-            fontSize: 10,
-            fontWeight: 600,
-          }}
-        >
-          {initials}
-        </span>
-      )}
-      <div>
-        <div className="kb-pr-comment-meta">
-          <a
+    <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
+      <Avatar
+        {...(comment.author.avatarUrl ? { src: comment.author.avatarUrl } : {})}
+        alt={login}
+        sx={{ width: 26, height: 26, fontSize: 10, bgcolor: colorForLogin(login) }}
+      >
+        {login.slice(0, 2).toUpperCase()}
+      </Avatar>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary" component="div">
+          <Box
+            component="a"
             href={comment.htmlUrl}
             target="_blank"
             rel="noreferrer noopener"
-            style={{ color: 'var(--ink-1)', fontWeight: 500 }}
+            sx={{ color: 'text.primary', fontWeight: 500, textDecoration: 'none' }}
           >
             {login}
-          </a>
+          </Box>
           {' · '}
           {ageString(comment.createdAt)} ago
           {comment.inline && comment.lineNumber !== undefined
             ? ` · line ${comment.lineNumber}`
             : ''}
-        </div>
-        <div className="kb-pr-comment-body">{comment.body}</div>
-      </div>
-    </div>
+        </Typography>
+        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {comment.body}
+        </Typography>
+      </Box>
+    </Stack>
   );
 }
 
@@ -2005,7 +2082,7 @@ function useStickToBottom(
   useEffect(() => {
     const el = anchorRef.current;
     if (!el) return;
-    const scroller = el.closest('.kb-modal-main') as HTMLElement | null;
+    const scroller = el.closest('[data-detail-scroller]') as HTMLElement | null;
     scrollerRef.current = scroller;
     if (!scroller) return;
     const onScroll = (): void => {
@@ -2084,21 +2161,19 @@ function CompletionActions({
   }
 
   return (
-    <div
-      style={{
-        border: '1px solid var(--accent-line)',
-        borderRadius: 8,
-        padding: 12,
-        background: 'color-mix(in oklch, var(--bg-1) 80%, var(--accent-soft))',
-      }}
+    <Alert
+      severity="success"
+      variant="outlined"
+      icon={false}
+      sx={{ '& .MuiAlert-message': { width: '100%' } }}
     >
-      <div style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 8 }}>
-        <b style={{ color: 'var(--accent)' }}>Run complete.</b> What's next?
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <button
-          type="button"
-          className="kb-btn ghost"
+      <Typography variant="body2" sx={{ mb: 1.25 }}>
+        <strong>Run complete.</strong> What&apos;s next?
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <Button
+          size="small"
+          variant="outlined"
           disabled={busy !== null}
           onClick={() =>
             void call(
@@ -2113,10 +2188,10 @@ function CompletionActions({
           }
         >
           {busy === 'review' ? 'Spawning…' : 'Review code'}
-        </button>
-        <button
-          type="button"
-          className="kb-btn ghost"
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
           disabled={busy !== null || alreadyDone}
           onClick={() =>
             void call(
@@ -2134,26 +2209,33 @@ function CompletionActions({
             : alreadyDone
               ? 'Marked complete'
               : 'Mark as complete'}
-        </button>
-        <button
-          type="button"
-          className="kb-btn ghost"
-          disabled={busy !== null}
-          onClick={() => {
-            setError(null);
-            setInfo(null);
-            setPrModalOpen(true);
-          }}
-          title="Drafts a title + body from this run's diff, then opens the PR with your edits."
-        >
-          Open draft PR
-        </button>
-      </div>
+        </Button>
+        <Tooltip title="Drafts a title + body from this run's diff, then opens the PR with your edits.">
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={busy !== null}
+              onClick={() => {
+                setError(null);
+                setInfo(null);
+                setPrModalOpen(true);
+              }}
+            >
+              Open draft PR
+            </Button>
+          </span>
+        </Tooltip>
+      </Stack>
       {info ? (
-        <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 8 }}>{info}</div>
+        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+          {info}
+        </Typography>
       ) : null}
       {error ? (
-        <div style={{ fontSize: 11, color: 'var(--failed)', marginTop: 8 }}>error: {error}</div>
+        <Typography variant="caption" color="error" component="div" sx={{ mt: 1 }}>
+          error: {error}
+        </Typography>
       ) : null}
       {prModalOpen ? (
         <CreatePrModal
@@ -2166,9 +2248,45 @@ function CompletionActions({
           }}
         />
       ) : null}
-    </div>
+    </Alert>
   );
 }
+
+/** A message bubble: user messages neutral, agent messages tinted. */
+function Bubble({
+  agent,
+  label,
+  createdAt,
+  children,
+}: {
+  agent: boolean;
+  label: string;
+  createdAt: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box
+      sx={(t) => ({
+        px: 1.5,
+        py: 1.25,
+        borderRadius: 1.5,
+        border: 1,
+        borderColor: agent ? alpha(t.palette.primary.main, 0.35) : t.palette.divider,
+        bgcolor: agent ? alpha(t.palette.primary.main, 0.06) : t.palette.background.default,
+      })}
+    >
+      <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
+        <Box component="b" sx={{ color: agent ? 'primary.main' : 'text.primary' }}>
+          {label}
+        </Box>{' '}
+        · {ageString(createdAt)} ago
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+const bubbleTextSx = { whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.55 };
 
 function MessageRow({
   message,
@@ -2180,53 +2298,27 @@ function MessageRow({
   /** Provider-derived label for agent messages (e.g. "OpenCode"). */
   agentLabel: string;
 }) {
+  const decisions = cards.map((c) =>
+    c.type === 'decision' ? <DecisionInline key={c.id} card={c as Card<DecisionPayload>} /> : null,
+  );
   if (message.role === 'system') {
     return (
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--ink-3)',
-          textAlign: 'center',
-          padding: '4px 0',
-        }}
-      >
-        — {message.body} · {ageString(message.createdAt)} ago —
-        {cards.map((c) =>
-          c.type === 'decision' ? (
-            <DecisionInline key={c.id} card={c as Card<DecisionPayload>} />
-          ) : null,
-        )}
-      </div>
+      <Box sx={{ textAlign: 'center', py: 0.5 }}>
+        <Typography variant="caption" color="text.secondary">
+          — {message.body} · {ageString(message.createdAt)} ago —
+        </Typography>
+        {decisions}
+      </Box>
     );
   }
   const isUser = message.role === 'user';
-  const label = isUser ? 'you' : agentLabel;
-  const labelColor = isUser ? 'var(--ink-1)' : 'var(--accent)';
-  const bg = isUser ? 'var(--bg-2)' : 'color-mix(in oklch, var(--bg-1) 80%, var(--accent-soft))';
-  const border = isUser ? 'var(--hairline)' : 'var(--accent-line)';
   return (
-    <div
-      style={{
-        background: bg,
-        border: `1px solid ${border}`,
-        borderRadius: 8,
-        padding: '10px 12px',
-      }}
-    >
-      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 5 }}>
-        <b style={{ color: labelColor }}>{label}</b> · {ageString(message.createdAt)} ago
-      </div>
-      <div
-        style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-1)', whiteSpace: 'pre-wrap' }}
-      >
+    <Bubble agent={!isUser} label={isUser ? 'you' : agentLabel} createdAt={message.createdAt}>
+      <Typography variant="body2" sx={bubbleTextSx}>
         {message.body}
-      </div>
-      {cards.map((c) =>
-        c.type === 'decision' ? (
-          <DecisionInline key={c.id} card={c as Card<DecisionPayload>} />
-        ) : null,
-      )}
-    </div>
+      </Typography>
+      {decisions}
+    </Bubble>
   );
 }
 
@@ -2262,50 +2354,56 @@ function DecisionInline({ card }: { card: Card<DecisionPayload> }) {
   }
 
   return (
-    <div
-      className="kb-decision"
-      role="region"
-      aria-label="Agent question"
-      style={{ marginTop: 10 }}
-    >
-      <div className="kb-decision-opts">
-        {isPending ? (
-          <KodraPulse
-            tone="violet"
-            size={7}
-            label="Awaiting your decision"
-            style={{ alignSelf: 'center' }}
-          />
-        ) : null}
+    <Box role="region" aria-label="Agent question" sx={{ mt: 1.25 }}>
+      <Stack
+        direction="row"
+        spacing={0.75}
+        sx={{ flexWrap: 'wrap', rowGap: 0.75, alignItems: 'center' }}
+      >
+        {isPending ? <KodraPulse tone="violet" size={7} label="Awaiting your decision" /> : null}
         {card.payload.options.map((opt, i) => (
-          <button
+          <Button
             key={opt.value}
-            type="button"
-            className={`kb-decision-opt${submitting === opt.value ? ' chosen' : ''}`}
+            size="small"
+            color="warning"
+            variant={submitting === opt.value ? 'contained' : 'outlined'}
             disabled={!isPending || submitting !== null}
             onClick={() => void pick(opt.value)}
+            startIcon={
+              <Box component="span" sx={{ ...monoChipSx, fontSize: 11, opacity: 0.7 }}>
+                {i + 1}
+              </Box>
+            }
           >
-            <span className="num">{i + 1}</span>
             {opt.label}
-          </button>
+          </Button>
         ))}
         {isPending ? (
-          <button
-            key="__dismiss"
-            type="button"
-            className="kb-decision-opt dismiss"
-            disabled={submitting !== null}
-            onClick={() => void dismiss()}
-            title="Dismiss this decision and stop the run"
-          >
-            Dismiss
-          </button>
+          <Tooltip title="Dismiss this decision and stop the run">
+            <span>
+              <Button
+                size="small"
+                color="secondary"
+                disabled={submitting !== null}
+                onClick={() => void dismiss()}
+              >
+                Dismiss
+              </Button>
+            </span>
+          </Tooltip>
         ) : null}
-      </div>
-      {isResolved ? <div className="kb-decision-resolved-note">resolved</div> : null}
-      {isDismissed ? <div className="kb-decision-resolved-note">dismissed</div> : null}
-      {error ? <div className="kb-decision-resolved-note">error: {error}</div> : null}
-    </div>
+      </Stack>
+      {isResolved || isDismissed || error ? (
+        <Typography
+          variant="caption"
+          color={error ? 'error' : 'text.secondary'}
+          component="div"
+          sx={{ mt: 0.5 }}
+        >
+          {error ? `error: ${error}` : isResolved ? 'resolved' : 'dismissed'}
+        </Typography>
+      ) : null}
+    </Box>
   );
 }
 
@@ -2313,37 +2411,24 @@ function EventRow({ event, agentLabel }: { event: AgentEvent; agentLabel: string
   if (event.type === 'text') {
     const text = (event.payload as { text?: string }).text ?? '';
     return (
-      <div
-        style={{
-          background: 'color-mix(in oklch, var(--bg-1) 80%, var(--accent-soft))',
-          border: '1px solid var(--accent-line)',
-          borderRadius: 8,
-          padding: '10px 12px',
-        }}
-      >
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 5 }}>
-          <b style={{ color: 'var(--accent)' }}>{agentLabel}</b> · {ageString(event.createdAt)} ago
-        </div>
-        <div
-          style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-1)', whiteSpace: 'pre-wrap' }}
-        >
+      <Bubble agent label={agentLabel} createdAt={event.createdAt}>
+        <Typography variant="body2" sx={bubbleTextSx}>
           {text}
-        </div>
-      </div>
+        </Typography>
+      </Bubble>
     );
   }
   if (event.type === 'error') {
     const p = event.payload as { message?: string };
     return (
-      <div className="kb-tcall" style={{ borderColor: 'var(--failed)' }}>
-        <div className="kb-tcall-head">
-          <span className="name" style={{ color: 'var(--failed)' }}>
-            error
-          </span>
-          <span className="arg">{p.message ?? 'unknown'}</span>
-          <span className="dur">{ageString(event.createdAt)} ago</span>
-        </div>
-      </div>
+      <Alert severity="error" variant="outlined" sx={{ py: 0.25 }}>
+        <Typography variant="body2" sx={monoChipSx}>
+          {p.message ?? 'unknown'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {ageString(event.createdAt)} ago
+        </Typography>
+      </Alert>
     );
   }
   if (event.type === 'containment_warning') {
@@ -2358,23 +2443,17 @@ function EventRow({ event, agentLabel }: { event: AgentEvent; agentLabel: string
       `${p.tool ?? 'tool'} → ${(p.paths ?? []).join(', ') || '(unknown path)'}` +
       (p.heuristic ? ' (heuristic)' : '');
     return (
-      <div
-        className="kb-tcall"
-        style={{
-          borderColor: 'var(--warning, #c47a00)',
-          background: 'color-mix(in oklch, var(--bg-1) 80%, #c47a0033)',
-        }}
-      >
-        <div className="kb-tcall-head">
-          <span className="name" style={{ color: 'var(--warning, #c47a00)' }}>
-            ⚠ containment {p.mode === 'pause' ? 'pause' : 'warn'}
-          </span>
-          <span className="arg" title={p.reason}>
-            {arg}
-          </span>
-          <span className="dur">{ageString(event.createdAt)} ago</span>
-        </div>
-      </div>
+      <Alert severity="warning" variant="outlined" sx={{ py: 0.25 }}>
+        <Typography variant="subtitle2">
+          Containment {p.mode === 'pause' ? 'pause' : 'warn'}
+        </Typography>
+        <Typography variant="body2" sx={monoChipSx} title={p.reason}>
+          {arg}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {ageString(event.createdAt)} ago
+        </Typography>
+      </Alert>
     );
   }
   return null;
@@ -2408,90 +2487,112 @@ function DiffTabModal({ activeRun }: { activeRun: AgentRun | null }) {
     };
   }, [activeRun?.id]);
 
-  if (!activeRun) {
+  if (!activeRun || loading || error || !data || data.empty) {
     return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-          No active run for this issue.
-        </div>
-      </div>
-    );
-  }
-  if (loading) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md">Loading…</div>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--failed)' }}>
-          {error}
-        </div>
-      </div>
-    );
-  }
-  if (!data || data.empty) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Diff</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-          No changes vs. base.
-        </div>
-      </div>
+      <TabSection title="Diff">
+        {error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {!activeRun
+              ? 'No active run for this issue.'
+              : loading
+                ? 'Loading…'
+                : 'No changes vs. base.'}
+          </Typography>
+        )}
+      </TabSection>
     );
   }
   return (
-    <div className="kb-tdm-section">
-      <h3>
-        Diff vs {data.base} · {data.files.length} file{data.files.length === 1 ? '' : 's'}
-      </h3>
-      <div className="kb-diff-block">
-        <div className="kb-diff-head">
-          <span className="branch">{data.branch ?? 'HEAD'}</span>
-          <span className="arrow">←</span>
-          <span className="branch" style={{ color: 'var(--ink-3)' }}>
-            {data.base}
-          </span>
-          <span className="stat">{data.files.length}</span>
-        </div>
+    <TabSection
+      title={`Diff vs ${data.base} · ${data.files.length} file${data.files.length === 1 ? '' : 's'}`}
+      action={
+        <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
+          {data.branch ?? 'HEAD'} ← {data.base}
+        </Typography>
+      }
+    >
+      <Stack spacing={1.5}>
         {data.files.map((f) => (
           <DiffFileBlockModal key={f.path} file={f} />
         ))}
-      </div>
-    </div>
+      </Stack>
+    </TabSection>
   );
 }
 
+const DIFF_STATUS_COLOR: Record<
+  DiffFile['status'],
+  'success' | 'error' | 'warning' | 'info' | 'secondary'
+> = {
+  added: 'success',
+  untracked: 'success',
+  deleted: 'error',
+  modified: 'warning',
+  renamed: 'info',
+  other: 'secondary',
+};
+
 function DiffFileBlockModal({ file }: { file: DiffFile }) {
   return (
-    <div className="kb-diff-file">
-      <div className="kb-diff-fhead">
-        <span className={`stat-tag ${file.status}`}>{file.status}</span>
-        <span className="path">{file.path}</span>
-      </div>
-      <div className="kb-diff-hunk">
+    <Box sx={{ borderRadius: 1, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ alignItems: 'center', px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Chip
+          size="small"
+          variant="light"
+          color={DIFF_STATUS_COLOR[file.status]}
+          label={file.status}
+        />
+        <Typography variant="body2" noWrap sx={{ ...monoChipSx, minWidth: 0 }}>
+          {file.path}
+        </Typography>
+      </Stack>
+      <Box
+        component="pre"
+        sx={{ m: 0, py: 1, overflowX: 'auto', fontSize: 12, lineHeight: 1.55, ...monoChipSx }}
+      >
         {file.patch.split('\n').map((line, idx) => {
-          let cls = '';
-          if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ')) {
-            cls = '';
-          } else if (line.startsWith('@@')) cls = 'hunk';
-          else if (line.startsWith('+')) cls = 'add';
-          else if (line.startsWith('-')) cls = 'del';
+          const kind =
+            line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ')
+              ? 'meta'
+              : line.startsWith('@@')
+                ? 'hunk'
+                : line.startsWith('+')
+                  ? 'add'
+                  : line.startsWith('-')
+                    ? 'del'
+                    : 'ctx';
           return (
-            <span key={idx} className={`kb-diff-line ${cls}`}>
+            <Box
+              key={idx}
+              component="span"
+              sx={(t) => ({
+                display: 'block',
+                px: 1.5,
+                whiteSpace: 'pre',
+                ...(kind === 'add' && {
+                  bgcolor: alpha(t.palette.success.main, 0.12),
+                  color: t.palette.success.main,
+                }),
+                ...(kind === 'del' && {
+                  bgcolor: alpha(t.palette.error.main, 0.12),
+                  color: t.palette.error.main,
+                }),
+                ...(kind === 'hunk' && { color: t.palette.info.main }),
+                ...(kind === 'meta' && { color: t.palette.text.secondary }),
+              })}
+            >
               {line || ' '}
-              {'\n'}
-            </span>
+            </Box>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
@@ -2508,8 +2609,7 @@ function PreviewTabModal({ activeRun }: { activeRun: AgentRun | null }) {
     window.dispatchEvent(new CustomEvent('kanbots:composer:insert', { detail: { text: block } }));
   }
   return (
-    <div className="kb-tdm-section">
-      <h3>Branch preview · live dev server on this worktree</h3>
+    <TabSection title="Branch preview · live dev server on this worktree">
       <PreviewPanel
         branch={activeRun?.branchName ?? null}
         worktreePath={activeRun?.worktreePath ?? null}
@@ -2517,7 +2617,7 @@ function PreviewTabModal({ activeRun }: { activeRun: AgentRun | null }) {
         size="tall"
         onInspectSelect={handleInspectSelect}
       />
-    </div>
+    </TabSection>
   );
 }
 
@@ -2540,6 +2640,43 @@ function formatInspectHeader(sel: PreviewInspectSelection): string {
   }
   return `Inspecting <${sel.tagName}>:`;
 }
+
+/** A titled block inside a detail tab. */
+function TabSection({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Box sx={{ pb: 2.5, '& + &': { pt: 2.5, borderTop: 1, borderColor: 'divider' } }}>
+      <Stack direction="row" sx={{ alignItems: 'center', mb: 1.5 }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          component="h3"
+          sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, flex: 1 }}
+        >
+          {title}
+        </Typography>
+        {action}
+      </Stack>
+      {children}
+    </Box>
+  );
+}
+
+const RUN_STATUS_TEXT: Record<AgentRunStatus, string> = {
+  running: 'Running',
+  complete: 'Completed',
+  failed: 'Failed',
+  awaiting_input: 'Awaiting input',
+  stopped: 'Stopped',
+  starting: 'Starting',
+};
 
 function RunsTab({
   issueNumber,
@@ -2572,102 +2709,96 @@ function RunsTab({
     }
   }
 
-  if (loading) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Run history</h3>
-        <div className="kb-desc-md">Loading…</div>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Run history</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--failed)' }}>
-          {error.message}
-        </div>
-      </div>
-    );
-  }
   const runs = data ?? [];
-  if (runs.length === 0) {
-    return (
-      <div className="kb-tdm-section">
-        <h3>Run history</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-          No agent runs yet.
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="kb-tdm-section">
-      <h3>Run history</h3>
-      {stopError ? (
-        <div role="alert" className="kb-desc-md" style={{ color: 'var(--failed)' }}>
-          {stopError}
-        </div>
-      ) : null}
-      <div className="kb-run-timeline">
-        {runs.map((r) => {
-          const status = r.status;
-          const isActive =
-            status === 'running' || status === 'awaiting_input' || status === 'starting';
-          return (
-            <div key={r.id} className={`kb-run-row kb-status-${status}`}>
-              <div className="kb-marker">
-                <div className="dot" />
-              </div>
-              <div>
-                <div className="kb-run-meta-line">
-                  <span
-                    style={{ color: isActive ? 'var(--running)' : 'var(--ink-2)', fontWeight: 600 }}
-                  >
-                    {status === 'running'
-                      ? '● Running'
-                      : status === 'complete'
-                        ? '✓ Completed'
-                        : status === 'failed'
-                          ? '✗ Failed'
-                          : status === 'awaiting_input'
-                            ? '? Awaiting'
-                            : status === 'stopped'
-                              ? '◼ Stopped'
-                              : '… Starting'}
-                  </span>
-                  <span className="id">run #{r.id}</span>
-                  <span>· {ageString(r.startedAt)} ago</span>
-                </div>
-                <div className="kb-run-summary">{r.exitReason ?? '(no exit reason)'}</div>
-                <div className="kb-run-stats-inline">
-                  <span>{r.model ?? '—'}</span>
-                  <span>
-                    {fmtTokens(r.tokenUsageInput)}/{fmtTokens(r.tokenUsageOutput)} tok
-                  </span>
-                  <span>{fmtElapsed(r.startedAt, r.endedAt ?? undefined)}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="kb-btn ghost"
-                disabled={isActive && stoppingRunId !== null}
-                onClick={() => {
-                  if (isActive) {
-                    void stopRun(r.id);
-                  } else {
-                    onViewRun(r);
-                  }
+    <TabSection title="Run history">
+      {loading ? (
+        <Typography variant="body2" color="text.secondary">
+          Loading…
+        </Typography>
+      ) : error ? (
+        <Alert severity="error">{error.message}</Alert>
+      ) : runs.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No agent runs yet.
+        </Typography>
+      ) : (
+        <Stack spacing={1}>
+          {stopError ? (
+            <Alert severity="error" role="alert">
+              {stopError}
+            </Alert>
+          ) : null}
+          {runs.map((r) => {
+            const status = r.status;
+            const isActive =
+              status === 'running' || status === 'awaiting_input' || status === 'starting';
+            const color = runStatusColor(status);
+            return (
+              <Stack
+                key={r.id}
+                direction="row"
+                spacing={1.5}
+                sx={{
+                  alignItems: 'flex-start',
+                  p: 1.5,
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor: 'divider',
                 }}
               >
-                {isActive && stoppingRunId === r.id ? 'Stopping…' : isActive ? 'Stop' : 'View'}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    mt: 0.75,
+                    borderRadius: '50%',
+                    bgcolor: `${color}.main`,
+                    flexShrink: 0,
+                  }}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+                    <Typography variant="subtitle2" sx={{ color: `${color}.main` }}>
+                      {RUN_STATUS_TEXT[status]}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
+                      run #{r.id}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      · {ageString(r.startedAt)} ago
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" sx={{ mt: 0.25, wordBreak: 'break-word' }}>
+                    {r.exitReason ?? '(no exit reason)'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={monoChipSx}>
+                    {r.model ?? '—'} · {fmtTokens(r.tokenUsageInput)}/
+                    {fmtTokens(r.tokenUsageOutput)} tok ·{' '}
+                    {fmtElapsed(r.startedAt, r.endedAt ?? undefined)}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  color={isActive ? 'error' : 'secondary'}
+                  variant={isActive ? 'outlined' : 'text'}
+                  disabled={isActive && stoppingRunId !== null}
+                  onClick={() => {
+                    if (isActive) {
+                      void stopRun(r.id);
+                    } else {
+                      onViewRun(r);
+                    }
+                  }}
+                >
+                  {isActive && stoppingRunId === r.id ? 'Stopping…' : isActive ? 'Stop' : 'View'}
+                </Button>
+              </Stack>
+            );
+          })}
+        </Stack>
+      )}
+    </TabSection>
   );
 }
 
@@ -2703,65 +2834,46 @@ function AutopilotStopButton({
 
   return (
     <>
-      <button
-        type="button"
-        className="kb-btn ghost"
+      <Button
+        size="small"
+        color="error"
+        variant="outlined"
         onClick={() => setConfirmOpen(true)}
         disabled={busy}
       >
         Stop autopilot
-      </button>
-      {confirmOpen ? (
-        <div className="kb-modal-scrim kb-app" onClick={() => !busy && setConfirmOpen(false)}>
-          <div
-            className="kb-modal sm"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 460 }}
-          >
-            <div className="kb-modal-head">
-              <h2>Stop autopilot</h2>
-              <span className="grow" />
-            </div>
-            <div className="kb-modal-body" style={{ display: 'block', padding: '14px 20px' }}>
-              <div style={{ fontSize: 13, color: 'var(--ink-1)', marginBottom: 12 }}>
-                The autopilot loop will stop creating new tasks. Choose what happens to any child
-                task that's currently running.
-              </div>
-              {error ? (
-                <div style={{ fontSize: 11, color: 'var(--failed)', marginBottom: 8 }}>{error}</div>
-              ) : null}
-            </div>
-            <div className="kb-modal-foot">
-              <button
-                type="button"
-                className="kb-btn ghost"
-                onClick={() => setConfirmOpen(false)}
-                disabled={busy}
-              >
-                Cancel
-              </button>
-              <span className="grow" />
-              <button
-                type="button"
-                className="kb-btn ghost"
-                onClick={() => void stop(false)}
-                disabled={busy}
-              >
-                Let children finish
-              </button>
-              <button
-                type="button"
-                className="kb-btn primary"
-                onClick={() => void stop(true)}
-                disabled={busy}
-                style={{ marginLeft: 8 }}
-              >
-                {busy ? 'Stopping…' : 'Stop and cancel children'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      </Button>
+      <Dialog
+        open={confirmOpen}
+        onClose={() => !busy && setConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Stop autopilot</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            The autopilot loop will stop creating new tasks. Choose what happens to any child task
+            that&apos;s currently running.
+          </Typography>
+          {error ? (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button color="secondary" onClick={() => setConfirmOpen(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Button color="secondary" onClick={() => void stop(false)} disabled={busy}>
+            Let children finish
+          </Button>
+          <Button variant="contained" color="error" onClick={() => void stop(true)} disabled={busy}>
+            {busy ? 'Stopping…' : 'Stop and cancel children'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
@@ -2784,31 +2896,28 @@ function AutopilotTab({ issueNumber }: { issueNumber: IssueRef }) {
 
   if (loading && !data) {
     return (
-      <div className="kb-tdm-section">
-        <h3>Autopilot</h3>
-        <div className="kb-desc-md">Loading…</div>
-      </div>
+      <TabSection title="Autopilot">
+        <Typography variant="body2" color="text.secondary">
+          Loading…
+        </Typography>
+      </TabSection>
     );
   }
   if (error) {
     return (
-      <div className="kb-tdm-section">
-        <h3>Autopilot</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--failed)' }}>
-          {error.message}
-        </div>
-      </div>
+      <TabSection title="Autopilot">
+        <Alert severity="error">{error.message}</Alert>
+      </TabSection>
     );
   }
   if (!data) {
     return (
-      <div className="kb-tdm-section">
-        <h3>Autopilot</h3>
-        <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
+      <TabSection title="Autopilot">
+        <Typography variant="body2" color="text.secondary">
           No autopilot session found for this card. It may have been started by an older app
           version.
-        </div>
-      </div>
+        </Typography>
+      </TabSection>
     );
   }
 
@@ -2830,59 +2939,63 @@ function AutopilotTab({ issueNumber }: { issueNumber: IssueRef }) {
         : `Next: ${personas[session.cycleIndex % personas.length]?.name ?? '—'}`
       : '';
 
-  return (
-    <div className="kb-tdm-section">
-      <h3>Autopilot · {session.kind}</h3>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          gap: '4px 16px',
-          fontSize: 12,
-          marginBottom: 14,
-        }}
-      >
-        <span style={{ color: 'var(--ink-3)' }}>Status</span>
-        <span style={{ color: 'var(--ink-1)' }}>
+  const facts: Array<{ label: string; value: ReactNode; mono?: boolean }> = [
+    {
+      label: 'Status',
+      value: (
+        <>
           {session.status}
           {session.stopReason ? (
-            <span style={{ color: 'var(--ink-3)' }}> · {session.stopReason}</span>
+            <Box component="span" sx={{ color: 'text.secondary' }}>
+              {' '}
+              · {session.stopReason}
+            </Box>
           ) : null}
-        </span>
-        <span style={{ color: 'var(--ink-3)' }}>Started</span>
-        <span style={{ color: 'var(--ink-1)' }}>{ageString(session.startedAt)} ago</span>
-        {session.endedAt ? (
-          <>
-            <span style={{ color: 'var(--ink-3)' }}>Ended</span>
-            <span style={{ color: 'var(--ink-1)' }}>{ageString(session.endedAt)} ago</span>
-          </>
-        ) : null}
-        <span style={{ color: 'var(--ink-3)' }}>Cycle</span>
-        <span style={{ color: 'var(--ink-1)' }}>
-          {session.cycleIndex} {cycleHint ? `· ${cycleHint}` : ''}
-        </span>
-        {featureDevConfig ? (
-          <>
-            <span style={{ color: 'var(--ink-3)' }}>Model</span>
-            <span style={{ color: 'var(--ink-1)' }} className="mono">
-              {featureDevConfig.model ?? 'default'}
-            </span>
-            <span style={{ color: 'var(--ink-3)' }}>Effort</span>
-            <span style={{ color: 'var(--ink-1)' }} className="mono">
-              {featureDevConfig.effort ?? 'medium'}
-            </span>
-            <span style={{ color: 'var(--ink-3)' }}>Parallel</span>
-            <span style={{ color: 'var(--ink-1)' }} className="mono">
-              {parallelism}
-            </span>
-          </>
-        ) : null}
-      </div>
+        </>
+      ),
+    },
+    { label: 'Started', value: `${ageString(session.startedAt)} ago` },
+  ];
+  if (session.endedAt) facts.push({ label: 'Ended', value: `${ageString(session.endedAt)} ago` });
+  facts.push({
+    label: 'Cycle',
+    value: `${session.cycleIndex}${cycleHint ? ` · ${cycleHint}` : ''}`,
+  });
+  if (featureDevConfig) {
+    facts.push(
+      { label: 'Model', value: featureDevConfig.model ?? 'default', mono: true },
+      { label: 'Effort', value: featureDevConfig.effort ?? 'medium', mono: true },
+      { label: 'Parallel', value: String(parallelism), mono: true },
+    );
+  }
+
+  return (
+    <>
+      <TabSection title={`Autopilot · ${session.kind}`}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'auto 1fr',
+            columnGap: 2,
+            rowGap: 0.5,
+          }}
+        >
+          {facts.map(({ label, value, mono }) => (
+            <Fragment key={label}>
+              <Typography variant="body2" color="text.secondary">
+                {label}
+              </Typography>
+              <Typography variant="body2" sx={mono ? monoChipSx : {}}>
+                {value}
+              </Typography>
+            </Fragment>
+          ))}
+        </Box>
+      </TabSection>
 
       {personas.length > 0 ? (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 6 }}>Personas</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <TabSection title="Personas">
+          <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
             {personas.map((p, i) => {
               const highlighted =
                 session.status === 'running' &&
@@ -2890,143 +3003,107 @@ function AutopilotTab({ issueNumber }: { issueNumber: IssueRef }) {
                   ? runningPersonaNames.has(p.name)
                   : i === session.cycleIndex % personas.length);
               return (
-                <span
+                <Chip
                   key={p.id}
-                  className="kb-chip mono"
-                  style={
-                    highlighted
-                      ? { borderColor: 'var(--accent)', color: 'var(--accent)' }
-                      : undefined
-                  }
-                >
-                  {p.name}
-                </span>
+                  size="small"
+                  label={p.name}
+                  color={highlighted ? 'primary' : 'secondary'}
+                  variant={highlighted ? 'light' : 'outlined'}
+                />
               );
             })}
-          </div>
-        </div>
+          </Stack>
+        </TabSection>
       ) : null}
 
       {checks.length > 0 || liveUi ? (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 6 }}>QA scope</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <TabSection title="QA scope">
+          <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
             {checks.map((c) => (
-              <span key={c.kind} className="kb-chip mono">
-                {c.kind}: {c.command}
-              </span>
+              <Chip
+                key={c.kind}
+                size="small"
+                variant="outlined"
+                label={`${c.kind}: ${c.command}`}
+                sx={monoChipSx}
+              />
             ))}
-            {liveUi ? <span className="kb-chip mono">live UI</span> : null}
-          </div>
-        </div>
+            {liveUi ? <Chip size="small" variant="outlined" label="live UI" /> : null}
+          </Stack>
+        </TabSection>
       ) : null}
 
-      <div>
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8 }}>
-          Children · {session.children.length}
-        </div>
-        {session.planningSlots && session.planningSlots.length > 0 ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              marginBottom: session.children.length > 0 ? 8 : 0,
-            }}
-          >
-            {session.planningSlots.map((slot) => (
-              <PlanningSlotRow key={slot.slotIndex} slot={slot} />
-            ))}
-          </div>
-        ) : null}
-        {session.children.length === 0 &&
-        (!session.planningSlots || session.planningSlots.length === 0) ? (
-          <div className="kb-desc-md" style={{ color: 'var(--ink-3)' }}>
-            No tasks created yet. The first one will appear shortly.
-          </div>
-        ) : null}
-        {session.children.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {[...session.children].reverse().map((child, idx) => (
-              <ChildRow key={`${child.issueNumber}-${idx}`} child={child} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
+      <TabSection title={`Children · ${session.children.length}`}>
+        <Stack spacing={0.75}>
+          {(session.planningSlots ?? []).map((slot) => (
+            <PlanningSlotRow key={slot.slotIndex} slot={slot} />
+          ))}
+          {session.children.length === 0 &&
+          (!session.planningSlots || session.planningSlots.length === 0) ? (
+            <Typography variant="body2" color="text.secondary">
+              No tasks created yet. The first one will appear shortly.
+            </Typography>
+          ) : null}
+          {[...session.children].reverse().map((child, idx) => (
+            <ChildRow key={`${child.issueNumber}-${idx}`} child={child} />
+          ))}
+        </Stack>
+      </TabSection>
+    </>
   );
 }
 
+const rowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1.25,
+  px: 1.25,
+  py: 1,
+  borderRadius: 1,
+  border: 1,
+  borderColor: 'divider',
+  color: 'inherit',
+  textDecoration: 'none',
+};
+
 function ChildRow({ child }: { child: AutopilotChildEntry }) {
   const isReal = String(child.issueNumber) !== '0';
+  const tag = child.kind === 'bug' ? 'BUG' : 'FEAT';
+  const statusColor =
+    child.status === 'complete'
+      ? 'info.main'
+      : child.status === 'failed' || child.status === 'stopped' || child.status === 'skipped'
+        ? 'error.main'
+        : 'success.main';
   return (
-    <a
+    <Box
+      component="a"
       href={isReal ? `#/issue/${child.issueNumber}` : undefined}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '8px 10px',
-        borderRadius: 6,
-        background: 'var(--bg-2)',
-        border: '1px solid var(--hairline-soft)',
-        textDecoration: 'none',
-        color: 'inherit',
-        fontSize: 12,
-        cursor: isReal ? 'pointer' : 'default',
-      }}
       onClick={(e) => {
         if (!isReal) e.preventDefault();
       }}
+      sx={{
+        ...rowSx,
+        cursor: isReal ? 'pointer' : 'default',
+        ...(isReal && { '&:hover': { borderColor: 'primary.main' } }),
+      }}
     >
-      <span
-        style={{
-          fontFamily: 'var(--ff-mono)',
-          fontSize: 11,
-          color: 'var(--ink-3)',
-          minWidth: 40,
-        }}
-      >
+      <Typography variant="caption" color="text.secondary" sx={{ ...monoChipSx, minWidth: 40 }}>
         {isReal ? `#${child.issueNumber}` : '—'}
-      </span>
-      <span
-        className={`kb-tag kb-tag-${child.kind === 'bug' ? 'BUG' : 'FEAT'}`}
-        style={{ flexShrink: 0 }}
-      >
-        {child.kind === 'bug' ? 'BUG' : 'FEAT'}
-      </span>
-      <span
-        style={{
-          flex: 1,
-          color: 'var(--ink-1)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
+      </Typography>
+      <Chip size="small" variant="outlined" color={tagColor(tag)} label={tag} />
+      <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
         {child.title}
-      </span>
+      </Typography>
       {child.persona ? (
-        <span style={{ color: 'var(--ink-3)', fontSize: 11 }}>{child.persona}</span>
+        <Typography variant="caption" color="text.secondary">
+          {child.persona}
+        </Typography>
       ) : null}
-      <span
-        style={{
-          color:
-            child.status === 'complete'
-              ? 'var(--review)'
-              : child.status === 'failed' ||
-                  child.status === 'stopped' ||
-                  child.status === 'skipped'
-                ? 'var(--failed)'
-                : 'var(--running)',
-          fontSize: 11,
-          minWidth: 64,
-          textAlign: 'right',
-        }}
-      >
+      <Typography variant="caption" sx={{ color: statusColor, minWidth: 64, textAlign: 'right' }}>
         {child.status}
-      </span>
-    </a>
+      </Typography>
+    </Box>
   );
 }
 
@@ -3038,64 +3115,41 @@ function PlanningSlotRow({ slot }: { slot: AutopilotPlanningSlot }) {
   }, []);
   const events = slot.recentEvents.slice(-3);
   return (
-    <div
-      style={{
-        padding: '8px 10px',
-        borderRadius: 6,
-        background: 'var(--bg-2)',
-        border: '1px solid var(--hairline-soft)',
-        fontSize: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span
-          style={{
-            display: 'inline-block',
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: 'var(--running)',
-            flexShrink: 0,
-          }}
+    <Box sx={{ ...rowSx, flexDirection: 'column', alignItems: 'stretch', gap: 0.5 }}>
+      <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+        <Box
+          sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', flexShrink: 0 }}
         />
-        <span style={{ flex: 1, color: 'var(--ink-1)' }}>
-          <span style={{ color: 'var(--ink-3)' }}>Planning · </span>
+        <Typography variant="body2" sx={{ flex: 1 }}>
+          <Box component="span" sx={{ color: 'text.secondary' }}>
+            Planning ·{' '}
+          </Box>
           {slot.persona}
-        </span>
-        <span style={{ color: 'var(--ink-3)', fontSize: 11 }}>{fmtElapsed(slot.startedAt)}</span>
-      </div>
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {fmtElapsed(slot.startedAt)}
+        </Typography>
+      </Stack>
       {events.length === 0 ? (
-        <div className="mono" style={{ color: 'var(--ink-3)', fontSize: 11, paddingLeft: 18 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ ...monoChipSx, pl: 2.25 }}>
           starting…
-        </div>
+        </Typography>
       ) : (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            paddingLeft: 18,
-            fontSize: 11,
-          }}
-        >
-          {events.map((e, i) => (
-            <span
-              key={`${e.at}-${i}`}
-              className="mono"
-              style={{
-                color: i === events.length - 1 ? 'var(--ink-2)' : 'var(--ink-3)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {e.text}
-            </span>
-          ))}
-        </div>
+        events.map((e, i) => (
+          <Typography
+            key={`${e.at}-${i}`}
+            variant="caption"
+            noWrap
+            sx={{
+              ...monoChipSx,
+              pl: 2.25,
+              color: i === events.length - 1 ? 'text.primary' : 'text.secondary',
+            }}
+          >
+            {e.text}
+          </Typography>
+        ))
       )}
-    </div>
+    </Box>
   );
 }
