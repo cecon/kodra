@@ -99,14 +99,24 @@ interface GroupedIssues {
   untagged: Issue[];
 }
 
-/** Inbox and Todo share a lane, Inbox on top: both are short queues, and
- *  stacking them leaves the width to the columns where work happens. */
+/** Columns that share a lane, top to bottom: Inbox over Todo, In progress
+ *  over Review. Fewer, taller lanes fit the whole flow on one screen. */
+const STACKS: ReadonlyArray<readonly string[]> = [
+  ['inbox', 'todo'],
+  ['inProgress', 'review'],
+];
+
 function boardLanes<T extends { status: string }>(columns: readonly T[]): T[][] {
-  const todo = columns.find((c) => c.status === 'todo');
   const lanes: T[][] = [];
+  const placed = new Set<T>();
   for (const col of columns) {
-    if (col.status === 'inbox' && todo) lanes.push([col, todo]);
-    else if (col !== todo || !columns.some((c) => c.status === 'inbox')) lanes.push([col]);
+    if (placed.has(col)) continue;
+    const stack = STACKS.find((st) => st[0] === col.status);
+    const lane = stack
+      ? stack.flatMap((status) => columns.filter((c) => c.status === status))
+      : [col];
+    for (const c of lane) placed.add(c);
+    lanes.push(lane);
   }
   return lanes;
 }
