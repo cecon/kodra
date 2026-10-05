@@ -790,6 +790,10 @@ export const api = {
     }
     return invoke('issues:archive', { number: issueNumber });
   },
+  /** Approve a reviewed card: push its branch and open its PR (PR column). */
+  openPullRequest: (issueNumber: IssueRef) => invoke('pr:open', { number: issueNumber }),
+  /** Merge the card's PR once CI passed; the card goes to Done. */
+  mergePullRequest: (issueNumber: IssueRef) => invoke('pr:merge', { number: issueNumber }),
   /** Pre-review gate: (re)run, stop, or send a failed one back to the agent. */
   runReviewGate: (runId: number) => invoke('review-gate:run', { runId }),
   stopReviewGate: (runId: number) => invoke('review-gate:stop', { runId }),

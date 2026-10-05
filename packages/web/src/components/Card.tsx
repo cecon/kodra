@@ -29,6 +29,8 @@ import {
   Play,
   Refresh,
   StopCircle,
+  ExportSquare,
+  TickCircle,
   Trash,
 } from 'iconsax-react';
 import { api } from '../api.js';
@@ -71,6 +73,12 @@ export function reviewGateOf(issue: Issue): ReviewGatePayload | null {
 export function moveBlockedReason(issue: Issue, target: StatusKey | null): string | null {
   if (liveRunOf(issue) !== null) {
     return `#${issue.number} has an agent working on it. Stop it first (⋯ → Stop agent) or wait for it to finish.`;
+  }
+  if (issue.status === 'pr') {
+    return `#${issue.number} has an open PR: merge it once CI passes (⋯ → Merge PR). A CI failure sends it back to the agent by itself.`;
+  }
+  if (target === 'pr' && issue.status !== 'review') {
+    return `Only a reviewed card goes to PR: approve #${issue.number} from Review.`;
   }
   const gate = reviewGateOf(issue);
   if (gate?.state === 'checking') {
@@ -135,6 +143,40 @@ const GATE_CHIP: Record<
   },
 };
 
+/** PR column cards show their PR's CI instead of an agent state. */
+function prChip(issue: Issue): (typeof GATE_CHIP)[keyof typeof GATE_CHIP] {
+  const pr = issue.pullRequest ?? null;
+  if (pr === null) {
+    return {
+      label: 'PR · syncing',
+      color: 'secondary',
+      title: 'Looking up the pull request on GitHub…',
+    };
+  }
+  if (pr.ci === 'pending') {
+    return {
+      label: `PR #${pr.number} · CI running`,
+      color: 'warning',
+      title: 'CI is running on the pull request.',
+    };
+  }
+  if (pr.ci === 'failed') {
+    return {
+      label: `PR #${pr.number} · CI failed`,
+      color: 'error',
+      title: `Failed: ${pr.failing.join(', ')}. The card goes back to the agent with the logs.`,
+    };
+  }
+  return {
+    label: `PR #${pr.number} · ready to merge`,
+    color: 'success',
+    title:
+      pr.ci === 'none'
+        ? 'No CI runs on this repo. Merge from ⋯.'
+        : 'CI passed. Merge from ⋯ → Merge PR.',
+  };
+}
+
 const CHECK_LABEL: Partial<Record<string, string>> = {
   commit: 'commit',
   install: 'deps',
@@ -172,7 +214,7 @@ function CardBody({
   // none is working on it right now (never started, finished or stopped).
   // A Review card shows its pre-review gate instead.
   const gate = reviewGateOf(issue);
-  const gateChip = gate ? GATE_CHIP[gate.state] : null;
+  const gateChip = gate ? GATE_CHIP[gate.state] : issue.status === 'pr' ? prChip(issue) : null;
   const idle = !gateChip && issue.status !== 'done' && agentLabel(issue.agent) === null;
   const stateColor = gateChip ? gateChip.color : idle ? 'secondary' : agentColor(issue.agent);
   const stateLabel = gateChip ? gateChip.label : idle ? 'Not running' : agentLabel(issue.agent);
@@ -253,7 +295,9 @@ function CardBody({
                   borderRadius: '50%',
                   bgcolor: 'currentColor',
                   ml: '6px !important',
-                  ...((isRunning || gate?.state === 'checking') && {
+                  ...((isRunning ||
+                    gate?.state === 'checking' ||
+                    (issue.status === 'pr' && issue.pullRequest?.ci === 'pending')) && {
                     animation: `${pulse} 1.4s ease-in-out infinite`,
                   }),
                 }}
@@ -459,7 +503,22 @@ function ReviewActions({
   onAction?: () => void;
 }) {
   const [shipOpen, setShipOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
   const { focusedRepoId } = useFocusedRepo();
+  function approve(e: MouseEvent<HTMLButtonElement>): void {
+    e.stopPropagation();
+    setApproving(true);
+    setApproveError(null);
+    void api
+      .openPullRequest(issueNumber)
+      .then(() => {
+        dispatchIssuesRefetch();
+        onAction?.();
+      })
+      .catch((err: unknown) => setApproveError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setApproving(false));
+  }
   function toggleShip(e: MouseEvent<HTMLButtonElement>): void {
     e.stopPropagation();
     setShipOpen((v) => !v);
@@ -496,16 +555,28 @@ function ReviewActions({
   return (
     <Stack spacing={1} onClick={stopClick} onPointerDown={stopClick}>
       <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
-        <Button size="small" variant="contained" onClick={toggleShip}>
-          {shipOpen ? 'Cancel' : 'Ship…'}
-        </Button>
+        <Tooltip title="Push the branch and open its pull request; the card moves to PR and waits on CI.">
+          <Button size="small" variant="contained" disabled={approving} onClick={approve}>
+            {approving ? 'Opening PR…' : 'Approve → open PR'}
+          </Button>
+        </Tooltip>
         <Button size="small" variant="outlined" color="secondary" onClick={requestChanges}>
           Request changes
         </Button>
         <Button size="small" color="secondary" onClick={spawnReviewer}>
           Run reviewer
         </Button>
+        <Tooltip title="No GitHub? Merge the branch into a local branch instead.">
+          <Button size="small" color="secondary" onClick={toggleShip}>
+            {shipOpen ? 'Cancel' : 'Merge locally…'}
+          </Button>
+        </Tooltip>
       </Stack>
+      {approveError ? (
+        <Typography variant="caption" color="error" role="alert">
+          {approveError}
+        </Typography>
+      ) : null}
       {shipOpen ? (
         <ShipPanel
           issueNumber={issueNumber}
@@ -868,6 +939,7 @@ function CardMenu({ issue }: { issue: Issue }) {
   const canRun =
     liveRun === null &&
     issue.status !== 'done' &&
+    issue.status !== 'pr' &&
     gate?.state !== 'checking' &&
     gate?.state !== 'failed';
 
@@ -932,6 +1004,34 @@ function CardMenu({ issue }: { issue: Issue }) {
         <IconsaxIcon icon={More} size={16} />
       </IconButton>
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        {issue.status === 'pr' && issue.pullRequest ? (
+          <MenuItem
+            component="a"
+            href={issue.pullRequest.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setAnchor(null)}
+            sx={{ gap: 1 }}
+          >
+            <IconsaxIcon icon={ExportSquare} size={16} />
+            Open PR on GitHub
+          </MenuItem>
+        ) : null}
+        {issue.status === 'pr' &&
+        (issue.pullRequest?.ci === 'passed' || issue.pullRequest?.ci === 'none') ? (
+          <MenuItem
+            disabled={pending !== null}
+            onClick={() =>
+              void perform('Merging…', "Couldn't merge the PR", () =>
+                api.mergePullRequest(issue.number),
+              )
+            }
+            sx={{ gap: 1, color: 'success.main' }}
+          >
+            <IconsaxIcon icon={TickCircle} size={16} />
+            Merge PR
+          </MenuItem>
+        ) : null}
         {gate?.state === 'failed' ? (
           <MenuItem
             disabled={pending !== null}

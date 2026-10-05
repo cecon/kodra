@@ -375,6 +375,20 @@ export interface DecoratedIssue extends Issue {
   /** Pre-review gate of a Review card: the checks run on its latest run's
    *  worktree. Null when the card isn't in Review or nothing was checked. */
   reviewGate?: ReviewGatePayload | null;
+  /** The card's pull request while it sits in the PR column. */
+  pullRequest?: PullRequestPayload | null;
+}
+
+/** A card's pull request as last seen on GitHub. */
+export interface PullRequestPayload {
+  number: number;
+  url: string;
+  state: 'OPEN' | 'MERGED' | 'CLOSED';
+  headSha: string;
+  /** CI on the PR's head commit; `none` when the repo runs no checks. */
+  ci: 'pending' | 'passed' | 'failed' | 'none';
+  /** Names of the failing checks. */
+  failing: string[];
 }
 
 export type ReviewGateState = 'checking' | 'passed' | 'failed' | 'stopped';
@@ -979,6 +993,9 @@ export interface BridgeChannels {
     args: { runId: number; kinds?: CheckKind[] };
     result: AgentCheck[];
   };
+  'pr:open': { args: { number: IssueRef }; result: PullRequestPayload };
+  'pr:merge': { args: { number: IssueRef }; result: PullRequestPayload };
+  'pr:refresh-all': { args: void; result: { changed: boolean } };
   'review-gate:run': { args: { runId: number }; result: AgentCheck[] };
   'review-gate:stop': { args: { runId: number }; result: { stopped: boolean } };
   'review-gate:send-back': { args: { number: IssueRef }; result: { ok: true } };

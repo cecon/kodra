@@ -123,13 +123,13 @@ function journeyOf(issue: Issue, onOpenTab: CardJourneyProps['onOpenTab']): Jour
   const failedKinds = gate?.checks.filter((c) => c.status === 'fail').map((c) => c.kind) ?? [];
 
   const agent: StepState =
-    status === 'review' || status === 'done'
+    status === 'review' || status === 'pr' || status === 'done'
       ? 'done'
       : live || status === 'inProgress'
         ? 'active'
         : 'todo';
   const checks: StepState =
-    status === 'done'
+    status === 'done' || status === 'pr'
       ? 'done'
       : status !== 'review'
         ? 'todo'
@@ -139,7 +139,20 @@ function journeyOf(issue: Issue, onOpenTab: CardJourneyProps['onOpenTab']): Jour
             ? 'active'
             : 'failed';
   const review: StepState =
-    status === 'done' ? 'done' : status === 'review' && checks === 'done' ? 'active' : 'todo';
+    status === 'done' || status === 'pr'
+      ? 'done'
+      : status === 'review' && checks === 'done'
+        ? 'active'
+        : 'todo';
+  const pr = status === 'pr' ? (issue.pullRequest ?? null) : null;
+  const prStep: StepState =
+    status === 'done'
+      ? 'done'
+      : status !== 'pr'
+        ? 'todo'
+        : pr?.ci === 'failed'
+          ? 'failed'
+          : 'active';
   const steps: Journey['steps'] = [
     { label: 'Agent works', state: agent, ...(live ? { caption: 'running now' } : {}) },
     {
@@ -154,6 +167,20 @@ function journeyOf(issue: Issue, onOpenTab: CardJourneyProps['onOpenTab']): Jour
             : {}),
     },
     { label: 'Your review', state: review },
+    {
+      label: 'PR & CI',
+      state: prStep,
+      ...(pr
+        ? {
+            caption:
+              pr.ci === 'pending'
+                ? `#${pr.number} · CI running`
+                : pr.ci === 'failed'
+                  ? `#${pr.number} · CI failed`
+                  : `#${pr.number} · ready to merge`,
+          }
+        : {}),
+    },
     { label: 'Done', state: status === 'done' ? 'done' : 'todo' },
   ];
 
@@ -169,8 +196,47 @@ function journeyOf(issue: Issue, onOpenTab: CardJourneyProps['onOpenTab']): Jour
     return {
       steps,
       severity: 'success',
-      next: 'nothing — this task is done. Its committed work stays on its branch.',
+      next: 'nothing — this task is done.',
       actions: [],
+    };
+  }
+  if (status === 'pr') {
+    if (pr === null) {
+      return {
+        steps,
+        severity: 'info',
+        next: 'looking up the pull request on GitHub (refreshed every minute).',
+        actions: [],
+      };
+    }
+    const openPr = { label: 'Open PR', run: () => void window.open(pr.url, '_blank') };
+    if (pr.ci === 'pending') {
+      return {
+        steps,
+        severity: 'info',
+        next: `wait for CI on PR #${pr.number}. If it fails, the card goes back to the agent with the logs by itself.`,
+        actions: [openPr],
+      };
+    }
+    if (pr.ci === 'failed') {
+      return {
+        steps,
+        severity: 'error',
+        next: `CI failed on PR #${pr.number} (${pr.failing.join(', ')}). The card is going back to the agent with the failing logs.`,
+        actions: [openPr],
+      };
+    }
+    return {
+      steps,
+      severity: 'success',
+      next:
+        pr.ci === 'none'
+          ? `PR #${pr.number} has no CI to wait for. Merge it to finish the task.`
+          : `CI passed on PR #${pr.number}. Merge it to finish the task.`,
+      actions: [
+        { label: 'Merge PR', primary: true, run: () => api.mergePullRequest(issue.number) },
+        openPr,
+      ],
     };
   }
   if (status === 'review') {
@@ -211,10 +277,12 @@ function journeyOf(issue: Issue, onOpenTab: CardJourneyProps['onOpenTab']): Jour
       steps,
       severity: 'success',
       next:
-        gate === null
-          ? 'review the changes in the Diff tab, then ship them or request changes from the card on the board.'
-          : 'all checks passed. Review the changes in the Diff tab, then ship them or request changes from the card on the board.',
-      actions: [{ label: 'Open Diff', primary: true, run: () => onOpenTab('diff') }],
+        (gate === null ? '' : 'all checks passed. ') +
+        'Review the changes in the Diff tab; if they are right, approve to push the branch and open its PR.',
+      actions: [
+        { label: 'Approve → open PR', primary: true, run: () => api.openPullRequest(issue.number) },
+        { label: 'Open Diff', run: () => onOpenTab('diff') },
+      ],
     };
   }
   return {

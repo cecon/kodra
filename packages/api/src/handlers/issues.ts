@@ -22,6 +22,7 @@ import type {
 import { bootstrapWorkspace } from '../workspace-bootstrap.js';
 import { sweepAllRunsForThread } from './agent-runs.js';
 import { gateForIssue } from './review-gate.js';
+import { knownPullRequest } from '../pr-flow.js';
 import { assertNoUncommittedWork } from '../worktree-guard.js';
 import { GitHubClient } from '@kanbots/core';
 import { issueRefSchema } from '../issue-ref.js';
@@ -231,6 +232,8 @@ function withReviewGate(deps: HandlerDeps, issue: DecoratedIssue): DecoratedIssu
   if (issue.status === 'review' && issue.activeRun === null) {
     issue.reviewGate = gateForIssue(deps, issue.number);
   }
+  // PR column cards show their PR and its CI, as last seen by the watcher.
+  if (issue.status === 'pr') issue.pullRequest = knownPullRequest(deps, issue.number);
   return issue;
 }
 

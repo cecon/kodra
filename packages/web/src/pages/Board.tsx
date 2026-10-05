@@ -443,6 +443,18 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
       setMoveError(blocked);
       return;
     }
+    // Review → PR is your approval: push the branch and open its PR.
+    if (targetStatus === 'pr') {
+      try {
+        await api.openPullRequest(issueNumber);
+        setMoveError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setMoveError(`Couldn't open a PR for #${issueNumber}: ${message}`);
+      }
+      dispatchIssuesRefetch();
+      return;
+    }
     // Failed checks go back to the agent with the errors as its prompt,
     // instead of a plain move + fresh dispatch.
     if (reviewGateOf(current)?.state === 'failed') {

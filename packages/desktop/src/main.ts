@@ -218,6 +218,8 @@ interface ActiveWorkspace {
   draftPrDescription: DraftPrDescriptionFn;
   analyzeSentryError: SentryAnalyzerFn;
   sentryPoller: SentryPoller;
+  /** Stops the PR watcher (CI of the cards in the PR column). */
+  stopPrWatcher: () => void;
   subscriptions: OwnedSubscriptionRegistry;
   unregisterHandlers: () => void;
   ownerId: number;
@@ -628,6 +630,7 @@ async function closeActiveWorkspace(): Promise<void> {
   } catch {
     // ignore
   }
+  activeWorkspace.stopPrWatcher();
   try {
     await activeWorkspace.autopilot.stopAllForShutdown();
   } catch {
@@ -1044,6 +1047,25 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
     },
     subscriptions,
   });
+
+  // PR column: every minute, refresh each card's PR and CI on GitHub; merged
+  // PRs move to Done and CI failures go back to the agent.
+  let prWatchStopped = false;
+  let prWatchTimer: NodeJS.Timeout | null = null;
+  const prWatchTick = async (): Promise<void> => {
+    try {
+      const { changed } = await handlers['pr:refresh-all']();
+      if (changed) broadcastIssueChange();
+    } catch {
+      // gh missing or offline: try again next minute
+    }
+    if (!prWatchStopped) prWatchTimer = setTimeout(() => void prWatchTick(), 60_000);
+  };
+  prWatchTimer = setTimeout(() => void prWatchTick(), 5_000);
+  const stopPrWatcher = (): void => {
+    prWatchStopped = true;
+    if (prWatchTimer) clearTimeout(prWatchTimer);
+  };
   const unregisterHandlers = registerHandlers(handlers, subscriptions);
   handlersHolder.handlers = handlers;
 
@@ -1090,6 +1112,7 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
     toolBridge,
     toolBridgeRuntimeDir,
     handlers,
+    stopPrWatcher,
   };
 
   sentryPoller.start();
@@ -2255,6 +2278,13 @@ async function createWindow(): Promise<void> {
   });
 
   forwardRendererConsole(win, 'main');
+
+  // Web links (a PR on GitHub, docs) open in the user's browser, never in
+  // a bare Electron window.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   if (process.env.KANBOTS_OPEN_DEVTOOLS) {
     win.webContents.openDevTools({ mode: 'detach' });
