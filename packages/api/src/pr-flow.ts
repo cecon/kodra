@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { IssueRef } from '@kanbots/core';
 import type { AgentRun } from '@kanbots/local-store';
@@ -77,8 +79,13 @@ const FAILED = new Set([
   'ERROR',
 ]);
 
-export function ciOf(rollup: readonly RollupItem[]): Pick<PullRequestPayload, 'ci' | 'failing'> {
-  if (rollup.length === 0) return { ci: 'none', failing: [] };
+export function ciOf(
+  rollup: readonly RollupItem[],
+  expectsCi = false,
+): Pick<PullRequestPayload, 'ci' | 'failing'> {
+  // Right after a push GitHub has registered no checks yet: in a repo with
+  // workflows that means CI hasn't started, not that there is none.
+  if (rollup.length === 0) return { ci: expectsCi ? 'pending' : 'none', failing: [] };
   const failing = rollup
     .filter((c) => FAILED.has(c.conclusion ?? '') || FAILED.has(c.state ?? ''))
     .map((c) => c.name ?? c.context ?? 'check');
@@ -90,6 +97,15 @@ export function ciOf(rollup: readonly RollupItem[]): Pick<PullRequestPayload, 'c
       c.state === 'EXPECTED',
   );
   return { ci: pending ? 'pending' : 'passed', failing: [] };
+}
+
+/** Whether the repo defines GitHub Actions workflows. */
+function hasWorkflows(repoPath: string): boolean {
+  try {
+    return readdirSync(join(repoPath, '.github', 'workflows')).some((f) => /.ya?ml$/i.test(f));
+  } catch {
+    return false;
+  }
 }
 
 /** The PR whose head is `branch` (open or not), or null. */
@@ -126,7 +142,7 @@ export async function prForBranch(
     url: pr.url,
     state: pr.state,
     headSha: pr.headRefOid,
-    ...ciOf(pr.statusCheckRollup ?? []),
+    ...ciOf(pr.statusCheckRollup ?? [], hasWorkflows(repoPath)),
   };
 }
 

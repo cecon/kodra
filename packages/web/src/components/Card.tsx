@@ -1,6 +1,13 @@
 import { useDraggable } from '@dnd-kit/core';
 import type { IssueRef } from '@kanbots/core';
-import { memo, useEffect, useState, type MouseEvent, type SyntheticEvent } from 'react';
+import {
+  memo,
+  useEffect,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+  type SyntheticEvent,
+} from 'react';
 import { alpha, keyframes, type Theme } from '@mui/material/styles';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
@@ -215,6 +222,7 @@ function CardBody({
   // A Review card shows its pre-review gate instead.
   const gate = reviewGateOf(issue);
   const gateChip = gate ? GATE_CHIP[gate.state] : issue.status === 'pr' ? prChip(issue) : null;
+  const prUrl = issue.status === 'pr' ? (issue.pullRequest?.url ?? null) : null;
   const idle = !gateChip && issue.status !== 'done' && agentLabel(issue.agent) === null;
   const stateColor = gateChip ? gateChip.color : idle ? 'secondary' : agentColor(issue.agent);
   const stateLabel = gateChip ? gateChip.label : idle ? 'Not running' : agentLabel(issue.agent);
@@ -285,6 +293,18 @@ function CardBody({
             color={stateColor}
             variant="light"
             label={stateLabel}
+            {...(prUrl
+              ? {
+                  // The PR chip opens the pull request in the browser.
+                  component: 'a',
+                  href: prUrl,
+                  target: '_blank',
+                  rel: 'noopener noreferrer',
+                  clickable: true,
+                  onClick: (e: MouseEvent) => e.stopPropagation(),
+                  onPointerDown: (e: PointerEvent) => e.stopPropagation(),
+                }
+              : {})}
             {...(stateTitle ? { title: stateTitle } : {})}
             icon={
               <Box

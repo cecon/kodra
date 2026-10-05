@@ -6,6 +6,10 @@ describe('ciOf', () => {
     expect(ciOf([])).toEqual({ ci: 'none', failing: [] });
   });
 
+  it('waits for CI to start when the repo has workflows but no checks yet', () => {
+    expect(ciOf([], true)).toEqual({ ci: 'pending', failing: [] });
+  });
+
   it('is pending while any check run has not completed', () => {
     expect(
       ciOf([
