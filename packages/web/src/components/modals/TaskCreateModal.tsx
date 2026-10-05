@@ -448,13 +448,22 @@ export function TaskCreateModal({
     [title, body, tag, priority, mode, assignee, model, branchName],
   );
 
+  // Closing throws the draft away, so it is never a stray click on the
+  // backdrop, and once something is typed it asks first.
+  const dirty =
+    title.trim() !== '' || customNumber.trim() !== '' || body.trim() !== initialDescription.trim();
+  const requestClose = useCallback((): void => {
+    if (dirty && !window.confirm('Discard this task? What you wrote will be lost.')) return;
+    onClose();
+  }, [dirty, onClose]);
+
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) requestClose();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   const modeDef = MODES.find((m) => m.id === mode) ?? MODES[0]!;
 
@@ -570,8 +579,8 @@ export function TaskCreateModal({
   }
 
   return (
-    <div className="kb-modal-scrim kb-app" onClick={onClose} role="dialog" aria-modal="true">
-      <div ref={modalRef} className="kb-modal" onClick={(e) => e.stopPropagation()} tabIndex={-1}>
+    <div className="kb-modal-scrim kb-app" role="dialog" aria-modal="true">
+      <div ref={modalRef} className="kb-modal" tabIndex={-1}>
         <div className="kb-modal-head">
           <Logo size={11} withWordmark />
           <span style={{ color: 'var(--ink-4)' }}>·</span>
@@ -580,7 +589,7 @@ export function TaskCreateModal({
           <span style={{ color: 'var(--ink-3)', fontSize: 11.5 }}>
             Press <span className="kb-kbd">{shortcut('mod+enter')}</span> to create
           </span>
-          <button type="button" className="x-btn" onClick={onClose} aria-label="Close">
+          <button type="button" className="x-btn" onClick={requestClose} aria-label="Close">
             <svg
               width="14"
               height="14"
@@ -624,9 +633,16 @@ export function TaskCreateModal({
                   <span className="kb-field-hint kb-field-hint-ai">
                     → becomes branch + PR title
                     <AiAssistButton
-                      label="Suggest a title with AI"
+                      label="Suggest title"
+                      description="Write a title from the description with AI"
                       busy={aiBusy === 'suggest-title'}
-                      disabled={aiBusy !== null || (title.trim() === '' && body.trim() === '')}
+                      disabledReason={
+                        aiBusy !== null
+                          ? 'AI is busy'
+                          : title.trim() === '' && body.trim() === ''
+                            ? 'Write a description first'
+                            : null
+                      }
                       onClick={() => void runAiAssist('suggest-title')}
                     />
                   </span>
@@ -711,9 +727,16 @@ export function TaskCreateModal({
                   <span className="kb-field-hint kb-field-hint-ai">
                     Markdown · use AC: for acceptance criteria
                     <AiAssistButton
-                      label="Improve writing with AI"
+                      label="Improve writing"
+                      description="Rewrite the description with AI: clearer, structured, with acceptance criteria"
                       busy={aiBusy === 'improve-description'}
-                      disabled={aiBusy !== null || body.trim() === ''}
+                      disabledReason={
+                        aiBusy !== null
+                          ? 'AI is busy'
+                          : body.trim() === ''
+                            ? 'Write a description first'
+                            : null
+                      }
                       onClick={() => void runAiAssist('improve-description')}
                     />
                   </span>
@@ -981,7 +1004,7 @@ export function TaskCreateModal({
               {focused.targetBranch ? ` · ${focused.targetBranch}` : ''}
             </span>
           ) : null}
-          <button type="button" className="kb-btn ghost" onClick={onClose}>
+          <button type="button" className="kb-btn ghost" onClick={requestClose}>
             Cancel
           </button>
           <SplitButton
