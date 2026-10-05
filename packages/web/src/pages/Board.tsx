@@ -99,6 +99,18 @@ interface GroupedIssues {
   untagged: Issue[];
 }
 
+/** Inbox and Todo share a lane, Inbox on top: both are short queues, and
+ *  stacking them leaves the width to the columns where work happens. */
+function boardLanes<T extends { status: string }>(columns: readonly T[]): T[][] {
+  const todo = columns.find((c) => c.status === 'todo');
+  const lanes: T[][] = [];
+  for (const col of columns) {
+    if (col.status === 'inbox' && todo) lanes.push([col, todo]);
+    else if (col !== todo || !columns.some((c) => c.status === 'inbox')) lanes.push([col]);
+  }
+  return lanes;
+}
+
 function groupByStatus(issues: Issue[]): GroupedIssues {
   const grouped: GroupedIssues = {
     byKey: { backlog: [], todo: [], inProgress: [], review: [], pr: [], done: [] },
@@ -763,21 +775,43 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
           alignItems: 'stretch',
         }}
       >
-        {COLUMNS.filter((col) => filterApi.includeBacklog || col.key !== 'backlog').map((col) => (
-          <Column
-            key={String(col.key)}
-            columnKey={col.key}
-            status={col.status}
-            label={col.label}
-            issues={col.key === null ? grouped.untagged : grouped.byKey[col.key]}
-            selectedNumber={selectedNumber}
-            multiSelected={cardSelection.selected}
-            liveByRun={liveByRun}
-            onSelect={handleCardSelect}
-            onOpen={handleCardOpen}
-            {...(col.key === 'backlog' ? backlogColumnProps : NO_COLUMN_SUGGESTION_PROPS)}
-          />
-        ))}
+        {boardLanes(COLUMNS.filter((col) => filterApi.includeBacklog || col.key !== 'backlog')).map(
+          (lane) => {
+            const render = (col: (typeof COLUMNS)[number], stacked: boolean) => (
+              <Column
+                key={String(col.key)}
+                columnKey={col.key}
+                status={col.status}
+                label={col.label}
+                issues={col.key === null ? grouped.untagged : grouped.byKey[col.key]}
+                selectedNumber={selectedNumber}
+                multiSelected={cardSelection.selected}
+                liveByRun={liveByRun}
+                onSelect={handleCardSelect}
+                onOpen={handleCardOpen}
+                stacked={stacked}
+                {...(col.key === 'backlog' ? backlogColumnProps : NO_COLUMN_SUGGESTION_PROPS)}
+              />
+            );
+            if (lane.length === 1) return render(lane[0]!, false);
+            // Columns sharing one lane, one above the other.
+            return (
+              <Box
+                key={lane.map((c) => String(c.key)).join('+')}
+                sx={{
+                  width: 300,
+                  flex: '0 0 300px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  minHeight: 0,
+                }}
+              >
+                {lane.map((col) => render(col, true))}
+              </Box>
+            );
+          },
+        )}
       </Box>
       <DragOverlay dropAnimation={null}>
         {activeIssue ? <CardPreview issue={activeIssue} /> : null}

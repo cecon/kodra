@@ -55,6 +55,9 @@ export interface ColumnProps {
   suggesting?: boolean;
   suggestingActivity?: SuggestActivity[];
   suggestingStartedAt?: string | null;
+  /** Shares a lane with other columns (one above the other): fills its
+   *  share of the lane's height instead of a fixed width. */
+  stacked?: boolean;
 }
 
 export function Column({
@@ -70,6 +73,7 @@ export function Column({
   onAdd,
   onSuggest,
   suggesting = false,
+  stacked = false,
   suggestingActivity,
   suggestingStartedAt = null,
 }: ColumnProps) {
@@ -89,8 +93,8 @@ export function Column({
       ref={setNodeRef}
       data-over={isOver ? 'true' : undefined}
       sx={(t: Theme) => ({
-        width: 300,
-        flex: '0 0 300px',
+        width: stacked ? '100%' : 300,
+        flex: stacked ? '1 1 0' : '0 0 300px',
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
