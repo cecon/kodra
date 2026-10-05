@@ -22,6 +22,8 @@ export interface MainDrawerProps {
   children: ReactNode;
   /** Pinned below the scroll area (e.g. the account row). */
   footer?: ReactNode;
+  /** Frameless desktop window: the brand row is a drag handle too. */
+  draggableHeader?: boolean;
 }
 
 // ==============================|| MAIN LAYOUT - DRAWER ||============================== //
@@ -31,7 +33,14 @@ export interface MainDrawerProps {
  * menu store and router: permanent mini drawer on large screens, temporary
  * drawer below `md`.
  */
-export default function MainDrawer({ open, onClose, header, children, footer }: MainDrawerProps) {
+export default function MainDrawer({
+  open,
+  onClose,
+  header,
+  children,
+  footer,
+  draggableHeader = false,
+}: MainDrawerProps) {
   const theme = useTheme();
   // Desktop windows are often narrower than the template's lg (1266px):
   // keep the permanent mini drawer down to md.
@@ -42,7 +51,12 @@ export default function MainDrawer({ open, onClose, header, children, footer }: 
       <DrawerHeaderStyled
         theme={theme}
         open={open}
-        sx={{ minHeight: HEADER_HEIGHT, py: 1, pl: open ? 3 : 0 }}
+        sx={{
+          minHeight: HEADER_HEIGHT,
+          py: 1,
+          pl: open ? 3 : 0,
+          ...(draggableHeader && { WebkitAppRegion: 'drag' }),
+        }}
       >
         {header}
       </DrawerHeaderStyled>

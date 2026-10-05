@@ -55,6 +55,7 @@ export default function DashboardLayout({
           onClose={onDrawerToggle}
           header={drawerHeader}
           footer={drawerFooter}
+          draggableHeader={draggableHeader}
         >
           {drawerContent}
         </MainDrawer>

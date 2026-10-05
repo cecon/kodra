@@ -497,8 +497,12 @@ h2 {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--ff-sans);
+  /* Full-screen pages outside the app shell have no title bar: the
+     backdrop is the frameless window's drag handle. */
+  -webkit-app-region: drag;
 }
 .picker-card {
+  -webkit-app-region: no-drag;
   background: var(--bg-1);
   border: 1px solid var(--hairline);
   border-radius: 12px;

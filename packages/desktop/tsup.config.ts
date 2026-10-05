@@ -2,7 +2,7 @@ import { cp } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { defineConfig } from 'tsup';
 
-export default defineConfig([
+export default defineConfig((options) => [
   {
     entry: { main: 'src/main.ts' },
     format: ['cjs'],
@@ -12,7 +12,10 @@ export default defineConfig([
     bundle: true,
     noExternal: [/^@kanbots\//, /^@octokit\//, 'before-after-hook', 'universal-user-agent'],
     external: ['electron', 'better-sqlite3', 'bindings', 'file-uri-to-path'],
-    clean: true,
+    // Not in watch mode: the preload is a separate build that only reruns
+    // when preload.ts changes, so cleaning on every main.ts rebuild would
+    // delete dist/preload.cjs and leave the renderer without its bridge.
+    clean: !options.watch,
     sourcemap: false,
     minify: false,
     // The dispatcher's preview proxy serves Eruda + the inspect injector
