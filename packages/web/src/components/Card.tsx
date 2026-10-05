@@ -21,7 +21,7 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { IconButton, IconsaxIcon } from '@kanbots/ui';
-import { Hierarchy, MessageQuestion, More, StopCircle, Trash } from 'iconsax-react';
+import { Hierarchy, MessageQuestion, More, Play, StopCircle, Trash } from 'iconsax-react';
 import { api } from '../api.js';
 import { useFocusedRepo } from '../hooks/useFocusedRepo.js';
 import { dispatchIssuesRefetch } from '../hooks/useIssues.js';
@@ -32,6 +32,7 @@ import {
   priorityFromLabels,
   strippedBranch,
   tagFromLabels,
+  withStatus,
 } from '../labels.js';
 import type { Issue, IssueActiveRun, ShipStatus } from '../types.js';
 import { agentColor, agentLabel, priorityColor, tagColor } from './board/boardStyle.js';
@@ -157,7 +158,7 @@ function CardBody({
             variant="light"
             label={stateLabel}
             {...(idle
-              ? { title: 'No agent is working on this card. Move it to In progress to start one.' }
+              ? { title: 'No agent is working on this card. Start one from ⋯ → Run agent.' }
               : {})}
             icon={
               <Box
@@ -720,7 +721,9 @@ function CheckPill({ kind, label }: { kind: 'pass' | 'fail' | 'running' | 'idle'
 }
 
 /**
- * "⋯" menu in the card's top-right corner. Stop agent ends a live run;
+ * "⋯" menu in the card's top-right corner. Run agent moves the card to In
+ * progress and dispatches an agent (as dragging it there does); Stop agent
+ * ends a live run;
  * Delete archives the card and removes the worktrees its runs created,
  * after a confirmation.
  *
@@ -736,6 +739,29 @@ function CardMenu({ issue }: { issue: Issue }) {
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
   const liveRun = liveRunOf(issue);
+  const { focusedRepoId } = useFocusedRepo();
+  const [starting, setStarting] = useState(false);
+  const canRun = liveRun === null && issue.status !== 'done';
+
+  async function runAgent(): Promise<void> {
+    setStarting(true);
+    setStopError(null);
+    try {
+      if (issue.status !== 'inProgress') {
+        await api.updateIssue(issue.number, { labels: withStatus(issue.labels, 'inProgress') });
+      }
+      await api.dispatchIssue(issue.number, {
+        fromStatus: issue.status,
+        ...(focusedRepoId !== null ? { repoId: focusedRepoId } : {}),
+      });
+      dispatchIssuesRefetch();
+    } catch (err) {
+      setStopError(`Couldn't start an agent: ${err instanceof Error ? err.message : String(err)}`);
+      dispatchIssuesRefetch();
+    } finally {
+      setStarting(false);
+    }
+  }
 
   async function stopAgent(runId: number): Promise<void> {
     setStopping(true);
@@ -744,7 +770,7 @@ function CardMenu({ issue }: { issue: Issue }) {
       await api.stopAgent(runId);
       dispatchIssuesRefetch();
     } catch (err) {
-      setStopError(err instanceof Error ? err.message : String(err));
+      setStopError(`Couldn't stop the agent: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setStopping(false);
     }
@@ -787,6 +813,19 @@ function CardMenu({ issue }: { issue: Issue }) {
         <IconsaxIcon icon={More} size={16} />
       </IconButton>
       <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
+        {canRun ? (
+          <MenuItem
+            disabled={starting}
+            onClick={() => {
+              setAnchor(null);
+              void runAgent();
+            }}
+            sx={{ gap: 1 }}
+          >
+            <IconsaxIcon icon={Play} size={16} />
+            {starting ? 'Starting…' : 'Run agent'}
+          </MenuItem>
+        ) : null}
         {liveRun ? (
           <MenuItem
             disabled={stopping}
@@ -818,7 +857,7 @@ function CardMenu({ issue }: { issue: Issue }) {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert severity="error" onClose={() => setStopError(null)}>
-          Couldn't stop #{issue.number}: {stopError}
+          #{issue.number}: {stopError}
         </Alert>
       </Snackbar>
       <Dialog
