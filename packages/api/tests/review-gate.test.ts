@@ -42,7 +42,8 @@ async function setup(outcome: (command: CheckCommand) => CheckResult['status']) 
   kit.source.setIssue(issueFixture(7, 'gate', { labels: ['status:review', 'agent:idle'] }));
   const thread = kit.store.threads.create({ repoOwner: 'octo', repoName: 'hello', issueNumber: 7 });
   const run = kit.store.agentRuns.create({ threadId: thread.id });
-  kit.store.agentRuns.update(run.id, { worktreePath: worktree });
+  // A finished run: the gate runs after the agent is done.
+  kit.store.agentRuns.update(run.id, { worktreePath: worktree, status: 'complete' });
   const commands: CheckCommand[] = [];
   const runCheckImpl: ReviewGateDeps['runCheckImpl'] = async ({ command }) => {
     commands.push(command);
@@ -104,12 +105,12 @@ describe('review gate', () => {
     expect(gateStateOf(checks)).toBe('failed');
   });
 
-  it('attaches the gate to Review cards in the board list', async () => {
+  it('attaches the gate to Review cards', async () => {
     const { kit, deps, runId } = await setup((c) => (c.kind === 'lint' ? 'fail' : 'pass'));
     await startReviewGate(deps, runId);
     await settled(deps, runId);
-    const [card] = await kit.handlers['issues:list']({});
-    expect(card?.reviewGate).toMatchObject({ runId, state: 'failed' });
+    const { issue: card } = await kit.handlers['issues:get']({ number: 7 });
+    expect(card.reviewGate).toMatchObject({ runId, state: 'failed' });
   });
 
   it('refuses to send back a card whose checks did not fail', async () => {
