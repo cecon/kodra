@@ -30,3 +30,19 @@
   height: auto;
   white-space: normal;
 }
+
+/* The app bar is the frameless window's drag handle, and Electron resolves
+   drag regions at the OS level regardless of what is painted on top: a
+   dialog or menu over the bar would have its clicks swallowed as window
+   drags. Everything that floats above the chrome opts out. */
+.MuiModal-root,
+.MuiPopover-root,
+.MuiPopper-root,
+.kb-modal-scrim,
+.kb-palette-overlay,
+.kb-tweaks,
+.kb-tray,
+.kb-updater,
+.kb-upd-overlay {
+  -webkit-app-region: no-drag;
+}
