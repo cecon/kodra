@@ -1,7 +1,8 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 
-/** `install` is the review gate's dependency install, recorded like a check. */
-export type CheckKind = 'install' | 'typecheck' | 'tests' | 'lint' | 'e2e';
+/** The review gate records two steps like checks: `commit` (the agent left
+ *  no uncommitted work) and `install` (dependencies). */
+export type CheckKind = 'commit' | 'install' | 'typecheck' | 'tests' | 'lint' | 'e2e';
 export type CheckStatus = 'idle' | 'running' | 'pass' | 'fail';
 
 export interface CheckCommand {
@@ -36,6 +37,8 @@ const DEFAULT_TIMEOUT_MS = 5 * 60_000;
 
 export function defaultCheckCommand(kind: CheckKind): CheckCommand {
   switch (kind) {
+    case 'commit':
+      return { kind, command: 'git', args: ['status', '--porcelain'] };
     case 'install':
       return { kind, command: 'pnpm', args: ['install', '--frozen-lockfile'] };
     case 'typecheck':

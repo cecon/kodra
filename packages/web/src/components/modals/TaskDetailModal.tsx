@@ -54,6 +54,7 @@ import { Add, CloseCircle } from 'iconsax-react';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { renderMarkdown } from '../../lib/markdown.js';
+import { CardJourney } from './CardJourney.js';
 import type {
   AgentEvent,
   AgentRun,
@@ -456,6 +457,8 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
                 />
               </Stack>
             </Box>
+
+            <CardJourney issue={issue} onOpenTab={setTab} onChanged={() => void refetch()} />
 
             <Tabs
               value={tab}

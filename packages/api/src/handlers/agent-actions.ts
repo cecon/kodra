@@ -7,6 +7,7 @@ import { removeWorktree, type AgentRunProvider } from '@kanbots/dispatcher';
 import type { AgentRun, Store } from '@kanbots/local-store';
 import { z } from 'zod';
 import type { DecoratedIssue, SplitResult } from '../bridge.js';
+import { assertNoUncommittedWork } from '../worktree-guard.js';
 import { sweepAllRunsForThread } from './agent-runs.js';
 import { buildActiveRunMap, decorateIssue } from './issues.js';
 import { badRequest, parseArgs } from './errors.js';
@@ -281,6 +282,7 @@ export async function unarchive(deps: HandlerDeps, args: NumberArgs): Promise<De
 
 export async function approve(deps: HandlerDeps, args: NumberArgs): Promise<DecoratedIssue> {
   const parsed = parseArgs(issueNumberSchema, args);
+  await assertNoUncommittedWork(deps, parsed.number);
   const issue = await deps.source.getIssue(parsed.number);
   const labels = issue.labels.filter((l) => !l.startsWith('status:') && !l.startsWith('agent:'));
   labels.push('status:done', 'agent:idle');
@@ -445,6 +447,7 @@ async function findPullForIssueBranch(
 }
 
 async function updateApprovedIssue(deps: HandlerDeps, issue: Issue): Promise<DecoratedIssue> {
+  await assertNoUncommittedWork(deps, issue.number);
   const labels = issue.labels.filter((l) => !l.startsWith('status:') && !l.startsWith('agent:'));
   labels.push('status:done', 'agent:idle');
   const updated = await deps.source.updateIssue(issue.number, {

@@ -139,8 +139,9 @@ export interface Card<P = unknown> {
   resolvedAt: string | null;
 }
 
-/** `install` is the review gate's dependency install, recorded like a check. */
-export type CheckKind = 'install' | 'typecheck' | 'tests' | 'lint' | 'e2e';
+/** The review gate records two steps like checks: `commit` (the agent left
+ *  no uncommitted work) and `install` (dependencies). */
+export type CheckKind = 'commit' | 'install' | 'typecheck' | 'tests' | 'lint' | 'e2e';
 export type CheckStatus = 'idle' | 'running' | 'pass' | 'fail';
 export type PreviewState = 'idle' | 'booting' | 'live' | 'crashed' | 'stopped';
 

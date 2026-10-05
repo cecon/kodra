@@ -22,6 +22,7 @@ import type {
 import { bootstrapWorkspace } from '../workspace-bootstrap.js';
 import { sweepAllRunsForThread } from './agent-runs.js';
 import { gateForIssue } from './review-gate.js';
+import { assertNoUncommittedWork } from '../worktree-guard.js';
 import { GitHubClient } from '@kanbots/core';
 import { issueRefSchema } from '../issue-ref.js';
 import { alreadyActive, badRequest, mapIssueError, notFound, parseArgs } from './errors.js';
@@ -211,20 +212,26 @@ export async function list(deps: HandlerDeps, args: ListIssuesArgs): Promise<Dec
   const activeRunMap = buildActiveRunMap(deps);
   const sentryMap = buildSentryMetaMap(deps);
   const subIssueCountMap = buildSubIssueCountMap(deps);
-  return issues.map((issue) => {
-    const decorated = decorateIssue(
-      issue,
-      activeRunMap.get(issue.number) ?? null,
-      sentryMap.get(issue.number) ?? null,
-      subIssueCountMap.get(issue.number) ?? 0,
-    );
-    // Review cards carry their pre-review gate so the board can lock them
-    // while it runs and show whether they passed.
-    if (decorated.status === 'review' && decorated.activeRun === null) {
-      decorated.reviewGate = gateForIssue(deps, issue.number);
-    }
-    return decorated;
-  });
+  return issues.map((issue) =>
+    withReviewGate(
+      deps,
+      decorateIssue(
+        issue,
+        activeRunMap.get(issue.number) ?? null,
+        sentryMap.get(issue.number) ?? null,
+        subIssueCountMap.get(issue.number) ?? 0,
+      ),
+    ),
+  );
+}
+
+/** Review cards carry their pre-review gate, so the board can lock them
+ *  while it runs and both board and detail can show whether they passed. */
+function withReviewGate(deps: HandlerDeps, issue: DecoratedIssue): DecoratedIssue {
+  if (issue.status === 'review' && issue.activeRun === null) {
+    issue.reviewGate = gateForIssue(deps, issue.number);
+  }
+  return issue;
 }
 
 export async function listArchived(deps: HandlerDeps): Promise<DecoratedIssue[]> {
@@ -264,11 +271,14 @@ export async function get(deps: HandlerDeps, args: GetIssueArgs): Promise<IssueD
   const sentryMeta = lookupSentryMeta(deps, parsed.number);
   const subIssueCountMap = buildSubIssueCountMap(deps);
   return {
-    issue: decorateIssue(
-      issue,
-      activeRunMap.get(parsed.number) ?? null,
-      sentryMeta,
-      subIssueCountMap.get(parsed.number) ?? 0,
+    issue: withReviewGate(
+      deps,
+      decorateIssue(
+        issue,
+        activeRunMap.get(parsed.number) ?? null,
+        sentryMeta,
+        subIssueCountMap.get(parsed.number) ?? 0,
+      ),
     ),
     comments,
     thread: threadPayload,
@@ -310,6 +320,11 @@ export async function patch(deps: HandlerDeps, args: PatchIssueArgs): Promise<De
     ...(parsed.patch.labels !== undefined ? { labels: parsed.patch.labels } : {}),
     ...(parsed.patch.assignees !== undefined ? { assignees: parsed.patch.assignees } : {}),
   };
+  // Done removes the card's worktrees (below): never with work still
+  // uncommitted in them.
+  if (parsed.patch.labels?.includes('status:done')) {
+    await assertNoUncommittedWork(deps, parsed.number);
+  }
   const issue = await deps.source.updateIssue(parsed.number, updates);
   const sentryMeta = lookupSentryMeta(deps, parsed.number);
   const subIssueCountMap = buildSubIssueCountMap(deps);

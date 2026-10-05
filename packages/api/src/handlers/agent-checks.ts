@@ -78,7 +78,9 @@ export async function runChecks(deps: RunChecksDeps, args: RunChecksArgs): Promi
   const planned = new Map(
     planChecks(
       await detectProject(cwd),
-      kinds.filter((k): k is Exclude<CheckKind, 'install'> => k !== 'install'),
+      kinds.filter(
+        (k): k is Exclude<CheckKind, 'install' | 'commit'> => k !== 'install' && k !== 'commit',
+      ),
       overrides,
     ).map((c) => [c.kind, c]),
   );
@@ -109,7 +111,7 @@ export function finishCheck(
   id: number,
   status: 'pass' | 'fail' | 'idle',
   summary: string,
-): void {
+): AgentCheck {
   const store = deps.store;
   const check = store.checks.finish({ id, status, summary });
   deps.supervisor.notifyChecksChanged(check.agentRunId);
@@ -124,6 +126,7 @@ export function finishCheck(
       });
     }
   }
+  return check;
 }
 
 export async function loadCheckOverrides(

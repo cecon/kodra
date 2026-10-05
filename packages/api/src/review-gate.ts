@@ -10,6 +10,7 @@ import type { AgentCheck, AgentRun } from '@kanbots/local-store';
 import type { ReviewGatePayload, ReviewGateState } from './bridge.js';
 import { finishCheck, loadCheckOverrides } from './handlers/agent-checks.js';
 import type { HandlerDeps } from './handlers/types.js';
+import { describeChanges, uncommittedChanges } from './worktree-guard.js';
 
 /**
  * Pre-review gate. When an agent run finishes and its card lands in Review,
@@ -55,9 +56,26 @@ export async function startReviewGate(deps: ReviewGateDeps, runId: number): Prom
   stopReviewGate(runId);
   const cwd = run.worktreePath;
 
+  // The work has to be committed: Done, Ship and deleting the worktree all
+  // lose anything that is only on disk.
+  const commitRow = deps.store.checks.start({ agentRunId: runId, kind: 'commit' });
+  deps.supervisor.notifyChecksChanged(runId);
+  const changes = await uncommittedChanges(cwd);
+  const committed = finishCheck(
+    deps,
+    commitRow.id,
+    changes !== null && changes.length === 0 ? 'pass' : 'fail',
+    changes === null
+      ? 'worktree not found'
+      : changes.length === 0
+        ? 'all work committed'
+        : `uncommitted changes (commit them):
+${describeChanges(changes)}`,
+  );
+
   const project = await detectProject(cwd);
   const checks = planChecks(project, GATE_KINDS, await loadCheckOverrides(deps));
-  if (checks.length === 0) return [];
+  if (checks.length === 0) return [committed];
   const needsInstall =
     project.packageManager !== null &&
     !project.hasNodeModules &&
@@ -120,7 +138,7 @@ export async function startReviewGate(deps: ReviewGateDeps, runId: number): Prom
       if (running.get(runId) === controller) running.delete(runId);
     });
 
-  return rows;
+  return [committed, ...rows];
 }
 
 /** Aborts a running gate; its checks end as stopped (`idle`). */

@@ -66,7 +66,7 @@ export function installCommand(pm: PackageManager): CheckCommand {
 }
 
 /** package.json script each check kind runs, in order of preference. */
-const SCRIPTS_FOR_KIND: Record<Exclude<CheckKind, 'install'>, readonly string[]> = {
+const SCRIPTS_FOR_KIND: Record<Exclude<CheckKind, 'install' | 'commit'>, readonly string[]> = {
   typecheck: ['typecheck', 'type-check', 'tsc'],
   lint: ['lint'],
   tests: ['test'],
@@ -80,7 +80,7 @@ const SCRIPTS_FOR_KIND: Record<Exclude<CheckKind, 'install'>, readonly string[]>
  */
 export function planChecks(
   project: ProjectInfo,
-  kinds: readonly Exclude<CheckKind, 'install'>[],
+  kinds: readonly Exclude<CheckKind, 'install' | 'commit'>[],
   overrides?: CheckCommandOverrides | null,
 ): CheckCommand[] {
   const out: CheckCommand[] = [];

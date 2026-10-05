@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +27,11 @@ async function npmWorktree(): Promise<string> {
     JSON.stringify({ scripts: { lint: 'eslint .', test: 'vitest run' } }),
   );
   await writeFile(join(dir, 'package-lock.json'), '{}');
+  // A committed checkout, like the agent leaves when it is done.
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
+  git('init', '-q');
+  git('add', '.');
+  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'init');
   return dir;
 }
 
@@ -48,7 +54,7 @@ async function setup(outcome: (command: CheckCommand) => CheckResult['status']) 
     config: { ...kit.config, repoPath: null },
     runCheckImpl,
   } as unknown as ReviewGateDeps;
-  return { kit, deps, runId: run.id, commands };
+  return { kit, deps, runId: run.id, commands, worktree };
 }
 
 async function settled(deps: ReviewGateDeps, runId: number) {
@@ -64,7 +70,8 @@ describe('review gate', () => {
   it('installs missing dependencies first, then runs the scripts the project has', async () => {
     const { deps, runId, commands } = await setup(() => 'pass');
     const rows = await startReviewGate(deps, runId);
-    expect(rows.map((r) => r.kind)).toEqual(['install', 'lint', 'tests']);
+    expect(rows.map((r) => r.kind)).toEqual(['commit', 'install', 'lint', 'tests']);
+    expect(rows[0]?.status).toBe('pass');
     expect(gateStateOf(rows)).toBe('checking');
     const checks = await settled(deps, runId);
     expect(gateStateOf(checks)).toBe('passed');
@@ -84,6 +91,17 @@ describe('review gate', () => {
     const gate = reviewGateFor(deps, deps.store.agentRuns.findById(runId));
     expect(gate?.state).toBe('failed');
     expect(failureReport(gate!)).toContain('### lint');
+  });
+
+  it('fails when the agent left uncommitted work', async () => {
+    const { deps, runId, worktree } = await setup(() => 'pass');
+    await writeFile(join(worktree, 'README.md'), 'changed but not committed');
+    await startReviewGate(deps, runId);
+    const checks = await settled(deps, runId);
+    const commit = checks.find((c) => c.kind === 'commit');
+    expect(commit?.status).toBe('fail');
+    expect(commit?.summary).toContain('README.md');
+    expect(gateStateOf(checks)).toBe('failed');
   });
 
   it('attaches the gate to Review cards in the board list', async () => {

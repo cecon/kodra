@@ -136,6 +136,7 @@ const GATE_CHIP: Record<
 };
 
 const CHECK_LABEL: Partial<Record<string, string>> = {
+  commit: 'commit',
   install: 'deps',
   typecheck: 'tsc',
   tests: 'tests',
