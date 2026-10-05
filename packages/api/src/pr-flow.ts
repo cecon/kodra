@@ -274,7 +274,9 @@ async function finishMerged(
   pr: PullRequestPayload,
 ): Promise<PullRequestPayload> {
   known.set(key(deps, number), pr);
-  await setStatus(deps, number, 'status:done', 'agent:idle', 'closed');
+  // Stays open with status:done, like a card dragged to Done, so it shows
+  // in the Done column (the board loads open issues only).
+  await setStatus(deps, number, 'status:done', 'agent:idle');
   // The work is on the base branch now: the worktrees can go.
   const thread = deps.store.threads.findByIssue(deps.config.owner, deps.config.repo, number);
   if (thread) await sweepAllRunsForThread(deps, thread.id);
