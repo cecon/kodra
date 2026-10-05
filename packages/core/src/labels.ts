@@ -13,6 +13,11 @@ export const STATUS_LABELS = {
     description: 'Being worked on',
   },
   review: { name: 'status:review', color: '0e8a16', description: 'Awaiting review' },
+  pr: {
+    name: 'status:pr',
+    color: '1d76db',
+    description: 'Pull request open, waiting on CI and merge',
+  },
   done: { name: 'status:done', color: '6c757d', description: 'Done' },
 } as const satisfies Record<string, Label>;
 

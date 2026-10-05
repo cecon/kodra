@@ -46,6 +46,8 @@ export function localStatusToCloud(status: StatusKey | null): CardStatus {
     case 'inProgress':
       return 'in_progress';
     case 'review':
+    // Cloud boards have no PR column yet: an open PR is still under review.
+    case 'pr':
       return 'review';
     case 'done':
       return 'done';

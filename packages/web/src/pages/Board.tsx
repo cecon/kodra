@@ -101,7 +101,7 @@ interface GroupedIssues {
 
 function groupByStatus(issues: Issue[]): GroupedIssues {
   const grouped: GroupedIssues = {
-    byKey: { backlog: [], todo: [], inProgress: [], review: [], done: [] },
+    byKey: { backlog: [], todo: [], inProgress: [], review: [], pr: [], done: [] },
     untagged: [],
   };
   for (const issue of issues) {
@@ -274,6 +274,7 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
         todo: sortIssues(base.byKey.todo, sortMode),
         inProgress: sortIssues(base.byKey.inProgress, sortMode),
         review: sortIssues(base.byKey.review, sortMode),
+        pr: sortIssues(base.byKey.pr, sortMode),
         done: sortIssues(base.byKey.done, sortMode),
       },
       untagged: base.untagged,

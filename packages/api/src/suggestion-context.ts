@@ -10,6 +10,7 @@ const STATUS_KEY_TO_ENTRY_STATUS: Record<StatusKey, SuggestFeatureEntryStatus> =
   todo: 'todo',
   inProgress: 'in-progress',
   review: 'in-review',
+  pr: 'in-review',
   done: 'done',
 };
 

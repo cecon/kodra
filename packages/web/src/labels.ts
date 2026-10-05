@@ -13,6 +13,7 @@ export const COLUMNS: readonly ColumnDef[] = [
   { key: 'todo', label: 'Todo', status: 'todo' },
   { key: 'inProgress', label: 'In progress', status: 'inProgress' },
   { key: 'review', label: 'Review', status: 'review' },
+  { key: 'pr', label: 'PR', status: 'pr' },
   { key: 'done', label: 'Done', status: 'done' },
 ];
 
@@ -21,6 +22,7 @@ export const STATUS_LABEL: Record<StatusKey, string> = {
   todo: 'Todo',
   inProgress: 'In progress',
   review: 'Review',
+  pr: 'PR',
   done: 'Done',
 };
 
@@ -31,6 +33,7 @@ export const STATUS_LABEL_NAMES: Record<StatusKey, string> = {
   todo: 'status:todo',
   inProgress: 'status:in-progress',
   review: 'status:review',
+  pr: 'status:pr',
   done: 'status:done',
 };
 
