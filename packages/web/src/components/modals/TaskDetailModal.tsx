@@ -917,6 +917,7 @@ function ReplyFooter({
         className="kb-btn primary"
         onClick={() => void send()}
         disabled={!body.trim() || sending}
+        title={body.trim() ? undefined : 'Type a message for the agent first'}
       >
         {sending ? 'Sending…' : 'Send'} <span className="kb-kbd">{shortcut('mod+enter')}</span>
       </button>

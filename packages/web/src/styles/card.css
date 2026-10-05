@@ -36,6 +36,15 @@
 .kb-btn.primary:hover {
   filter: brightness(1.06);
 }
+/* Disabled buttons must look it: an accent-filled Send that does nothing
+   reads as broken. */
+.kb-btn:disabled,
+.kb-btn:disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: none;
+  box-shadow: none;
+}
 .kb-btn.ghost {
   background: transparent;
   border-color: transparent;
