@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import type { IssueRef } from '@kanbots/core';
 import type { AgentRun } from '@kanbots/local-store';
 import type { PullRequestPayload } from './bridge.js';
-import { sweepAllRunsForThread } from './handlers/agent-runs.js';
+import { repoPathOfRun, sweepAllRunsForThread } from './handlers/agent-runs.js';
 import { badRequest } from './handlers/errors.js';
 import { postMessage } from './handlers/issues.js';
 import type { HandlerDeps } from './handlers/types.js';
@@ -45,9 +45,15 @@ async function run(cmd: string, args: string[], cwd: string): Promise<string> {
   }
 }
 
-function repoPathOf(deps: HandlerDeps): string {
-  const repoPath = deps.config.repoPath;
-  if (!repoPath) throw badRequest('this workspace has no local repository');
+/** The repo the card's work lives in: its latest run's, else the opened one. */
+function cardRepoPath(deps: HandlerDeps, number: IssueRef): string | null {
+  const latest = latestRunOf(deps, number);
+  return latest ? repoPathOfRun(deps, latest) : (deps.config.repoPath ?? null);
+}
+
+function repoPathOf(deps: HandlerDeps, number: IssueRef): string {
+  const repoPath = cardRepoPath(deps, number);
+  if (!repoPath) throw badRequest(`#${String(number)} has no repository to work in`);
   return repoPath;
 }
 
@@ -64,7 +70,7 @@ function latestRunOf(deps: HandlerDeps, number: IssueRef): AgentRun | null {
  * branch with commits ahead of its base.
  */
 async function resolveBranch(deps: HandlerDeps, number: IssueRef): Promise<string | null> {
-  const repoPath = deps.config.repoPath;
+  const repoPath = cardRepoPath(deps, number);
   const thread = deps.store.threads.findByIssue(deps.config.owner, deps.config.repo, number);
   if (!repoPath || !thread) return null;
   const runs = deps.store.agentRuns.listByThread(thread.id).sort((a, b) => b.id - a.id);
@@ -216,7 +222,7 @@ export async function openPullRequest(
   deps: HandlerDeps,
   number: IssueRef,
 ): Promise<PullRequestPayload> {
-  const repoPath = repoPathOf(deps);
+  const repoPath = repoPathOf(deps, number);
   const branch = await branchOf(deps, number);
   await assertNoUncommittedWork(deps, number);
   // Agent worktrees install a pre-push hook that refuses kodra/issue-*
@@ -251,12 +257,16 @@ export async function openPullRequest(
   return pr;
 }
 
+function autoMergeEnabled(deps: HandlerDeps, workspaceId: string | null): boolean {
+  return workspaceId ? (deps.registry?.get(workspaceId)?.stages.autoMerge ?? false) : false;
+}
+
 /** You merge once CI passed; the card then goes to Done. */
 export async function mergePullRequest(
   deps: HandlerDeps,
   number: IssueRef,
 ): Promise<PullRequestPayload> {
-  const repoPath = repoPathOf(deps);
+  const repoPath = repoPathOf(deps, number);
   const pr = await prForBranch(repoPath, await branchOf(deps, number));
   if (!pr || pr.state !== 'OPEN') throw badRequest(`#${number} has no open pull request`);
   if (pr.ci === 'failed' || pr.ci === 'pending') {
@@ -324,7 +334,7 @@ async function ensureWorktreeOn(
   branch: string,
 ): Promise<void> {
   const latest = latestRunOf(deps, number);
-  const repoPath = deps.config.repoPath;
+  const repoPath = latest ? repoPathOfRun(deps, latest) : null;
   if (!latest || !repoPath) return;
   if (latest.worktreePath && existsSync(latest.worktreePath)) return;
   const path = join(repoPath, '.kodra', 'worktrees', `issue-${String(number)}-pr`);
@@ -338,7 +348,7 @@ export async function sendBackForCi(
   number: IssueRef,
   pr: PullRequestPayload,
 ): Promise<void> {
-  const repoPath = repoPathOf(deps);
+  const repoPath = repoPathOf(deps, number);
   const branch = await branchOf(deps, number);
   const logs = await failedLogs(repoPath, branch);
   await ensureWorktreeOn(deps, number, branch);
@@ -362,14 +372,13 @@ export async function sendBackForCi(
  * head commit). Returns whether anything changed.
  */
 export async function watchPullRequests(deps: HandlerDeps): Promise<boolean> {
-  const repoPath = deps.config.repoPath;
-  if (!repoPath) return false;
   const issues = await deps.source.listIssues({ state: 'open' });
   let changed = false;
   for (const issue of issues) {
     if (!issue.labels.includes('status:pr')) continue;
     const branch = await resolveBranch(deps, issue.number);
-    if (!branch) continue;
+    const repoPath = cardRepoPath(deps, issue.number);
+    if (!branch || !repoPath) continue;
     let pr: PullRequestPayload | null;
     try {
       pr = await prForBranch(repoPath, branch);
@@ -384,6 +393,18 @@ export async function watchPullRequests(deps: HandlerDeps): Promise<boolean> {
     if (pr.state === 'MERGED') {
       await finishMerged(deps, issue.number, pr);
       changed = true;
+    } else if (
+      pr.state === 'OPEN' &&
+      (pr.ci === 'passed' || pr.ci === 'none') &&
+      autoMergeEnabled(deps, issue.workspaceId ?? null)
+    ) {
+      // The workspace merges by itself once CI is green.
+      try {
+        await mergePullRequest(deps, issue.number);
+        changed = true;
+      } catch {
+        // retried on the next pass
+      }
     } else if (pr.state === 'OPEN' && pr.ci === 'failed' && sentBack.get(k) !== pr.headSha) {
       try {
         await sendBackForCi(deps, issue.number, pr);

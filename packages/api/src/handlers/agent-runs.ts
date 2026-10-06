@@ -86,7 +86,7 @@ async function runDiff(deps: HandlerDeps, run: AgentRun): Promise<DiffPayload> {
   if (run.worktreePath && existsSync(run.worktreePath)) {
     return collectDiff(run.worktreePath, run.branchName, run.baseBranch);
   }
-  const repoPath = deps.config.repoPath;
+  const repoPath = repoPathOfRun(deps, run);
   if (repoPath && run.branchName) {
     const branchDiff = await collectBranchDiff(repoPath, run.branchName, run.baseBranch);
     if (branchDiff) return branchDiff;
@@ -339,18 +339,14 @@ export async function sweepMergedRunsForThread(
   deps: HandlerDeps,
   threadId: number,
 ): Promise<{ swept: number }> {
-  const repoPath = deps.config.repoPath;
-  if (!repoPath) return { swept: 0 };
-  let base: string;
-  try {
-    base = await detectLocalBase(repoPath);
-  } catch {
-    return { swept: 0 };
-  }
+  const bases = baseResolver();
   const runs = deps.store.agentRuns.listByThread(threadId);
   let swept = 0;
   for (const run of runs) {
     if (!run.branchName || !run.worktreePath) continue;
+    const repoPath = repoPathOfRun(deps, run);
+    const base = repoPath ? await bases(repoPath) : null;
+    if (!repoPath || base === null) continue;
     let isMerged = false;
     try {
       const { stdout } = await execFileAsync(
@@ -370,6 +366,25 @@ export async function sweepMergedRunsForThread(
   return { swept };
 }
 
+/** The repo a run worked in: recorded on the run, else the opened one
+ *  (runs from before cards carried a workspace). */
+export function repoPathOfRun(deps: HandlerDeps, run: AgentRun): string | null {
+  return run.repoPath ?? deps.config.repoPath ?? null;
+}
+
+/** Memoised local base branch per repo (null when it can't be found). */
+function baseResolver(): (repoPath: string) => Promise<string | null> {
+  const cache = new Map<string, Promise<string | null>>();
+  return (repoPath) => {
+    let base = cache.get(repoPath);
+    if (!base) {
+      base = detectLocalBase(repoPath).catch(() => null);
+      cache.set(repoPath, base);
+    }
+    return base;
+  };
+}
+
 const LIVE_RUN_STATUSES: ReadonlySet<AgentRun['status']> = new Set([
   'starting',
   'running',
@@ -386,16 +401,7 @@ export async function sweepAllRunsForThread(
   deps: HandlerDeps,
   threadId: number,
 ): Promise<{ worktreesRemoved: number; branchesDeleted: number; branchesKept: number }> {
-  const repoPath = deps.config.repoPath;
-  if (!repoPath) {
-    return { worktreesRemoved: 0, branchesDeleted: 0, branchesKept: 0 };
-  }
-  let base: string | null = null;
-  try {
-    base = await detectLocalBase(repoPath);
-  } catch {
-    base = null;
-  }
+  const bases = baseResolver();
   const runs = deps.store.agentRuns.listByThread(threadId);
   let worktreesRemoved = 0;
   let branchesDeleted = 0;
@@ -406,6 +412,11 @@ export async function sweepAllRunsForThread(
     // in it: the card can reach Done while a run is live (a stale drag, or
     // a status change from elsewhere). Stop the run first.
     if (LIVE_RUN_STATUSES.has(run.status)) continue;
+    // Each run cleans up in the repo it worked in (cards can act on any
+    // registered workspace, not only the opened one).
+    const repoPath = repoPathOfRun(deps, run);
+    if (!repoPath) continue;
+    const base = await bases(repoPath);
     let keepBranch = true;
     if (base !== null && run.branchName) {
       try {

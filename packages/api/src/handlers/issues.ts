@@ -236,7 +236,15 @@ function withReviewGate(deps: HandlerDeps, issue: DecoratedIssue): DecoratedIssu
   }
   // The workspace (repo) the card acts on, for its colour and name.
   const profile = issue.workspaceId ? deps.registry?.get(issue.workspaceId) : null;
-  issue.workspace = profile ? { id: profile.id, name: profile.name, color: profile.color } : null;
+  issue.workspace = profile
+    ? {
+        id: profile.id,
+        name: profile.name,
+        color: profile.color,
+        review: profile.stages.review,
+        pr: profile.stages.pr,
+      }
+    : null;
   // PR column cards show their PR and its CI, as last seen by the watcher.
   if (issue.status === 'pr') issue.pullRequest = knownPullRequest(deps, issue.number);
   return issue;

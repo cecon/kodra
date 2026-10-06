@@ -8,6 +8,7 @@ import {
 } from '@kanbots/dispatcher';
 import type { AgentCheck, AgentRun } from '@kanbots/local-store';
 import type { ReviewGatePayload, ReviewGateState } from './bridge.js';
+import { afterGatePassed } from './card-flow.js';
 import { finishCheck, loadCheckOverrides } from './handlers/agent-checks.js';
 import type { HandlerDeps } from './handlers/types.js';
 import { describeChanges, uncommittedChanges } from './worktree-guard.js';
@@ -73,9 +74,24 @@ export async function startReviewGate(deps: ReviewGateDeps, runId: number): Prom
 ${describeChanges(changes)}`,
   );
 
+  // The workspace's stages pick the checks; the commit check above always
+  // runs, since uncommitted work is lost on Done.
+  const profile = run.workspaceId ? (deps.registry?.get(run.workspaceId) ?? null) : null;
+  const kinds = !profile
+    ? GATE_KINDS
+    : profile.stages.checks
+      ? GATE_KINDS.filter((k) => profile.stages.checkKinds.includes(k))
+      : [];
   const project = await detectProject(cwd);
-  const checks = planChecks(project, GATE_KINDS, await loadCheckOverrides(deps));
-  if (checks.length === 0) return [committed];
+  const checks = planChecks(
+    project,
+    kinds,
+    await loadCheckOverrides(deps, run.repoPath ?? deps.config.repoPath ?? null),
+  );
+  if (checks.length === 0) {
+    if (committed.status === 'pass') void advanceIfPassed(deps, runId);
+    return [committed];
+  }
   const needsInstall =
     project.packageManager !== null &&
     !project.hasNodeModules &&
@@ -136,9 +152,20 @@ ${describeChanges(changes)}`,
     })
     .finally(() => {
       if (running.get(runId) === controller) running.delete(runId);
+      void advanceIfPassed(deps, runId);
     });
 
   return [committed, ...rows];
+}
+
+/** A green gate moves on by itself when the workspace skips human review. */
+async function advanceIfPassed(deps: HandlerDeps, runId: number): Promise<void> {
+  if (gateStateOf(deps.store.checks.listLatestByRun(runId)) !== 'passed') return;
+  try {
+    await afterGatePassed(deps, runId);
+  } catch (err) {
+    console.warn(`[review-gate] could not advance run ${runId}:`, err);
+  }
 }
 
 /** Aborts a running gate; its checks end as stopped (`idle`). */

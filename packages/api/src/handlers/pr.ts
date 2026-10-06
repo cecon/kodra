@@ -2,6 +2,7 @@ import type { IssueRef } from '@kanbots/core';
 import { z } from 'zod';
 import type { PullRequestPayload } from '../bridge.js';
 import { issueRefSchema } from '../issue-ref.js';
+import { approveCard, type ApproveResult } from '../card-flow.js';
 import { mergePullRequest, openPullRequest, watchPullRequests } from '../pr-flow.js';
 import { parseArgs } from './errors.js';
 import type { HandlerDeps } from './types.js';
@@ -14,6 +15,14 @@ export async function open(
   args: { number: IssueRef },
 ): Promise<PullRequestPayload> {
   return openPullRequest(deps, parseArgs(numberSchema, args).number);
+}
+
+/** Approve a reviewed card: PR or local merge, by its workspace's stages. */
+export async function approve(
+  deps: HandlerDeps,
+  args: { number: IssueRef },
+): Promise<ApproveResult> {
+  return approveCard(deps, parseArgs(numberSchema, args).number);
 }
 
 /** Merge a card's PR once CI passed; the card goes to Done. */

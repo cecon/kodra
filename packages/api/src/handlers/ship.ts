@@ -95,7 +95,8 @@ async function resolveRun(
   const active = deps.store.agentRuns.findActiveForThread(thread.id);
   const run = active ?? deps.store.agentRuns.findLatestForThread(thread.id);
   if (!run) throw notFound(`no agent runs for issue #${issueNumber}`);
-  return { run, repoPath };
+  // Ship in the repo the run worked in (the card's workspace).
+  return { run, repoPath: run.repoPath ?? repoPath };
 }
 
 async function listLocalBranches(repoPath: string): Promise<string[]> {

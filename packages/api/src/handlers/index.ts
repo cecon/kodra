@@ -112,6 +112,7 @@ export function createHandlers(opts: CreateHandlersOptions): Handlers {
     'workspace-profiles:list': async () => workspaceProfiles.list(deps),
     'workspace-profiles:save': async (args) => workspaceProfiles.save(deps, args),
     'workspace-profiles:remove': async (args) => workspaceProfiles.remove(deps, args),
+    'cards:approve': (args) => pr.approve(deps, args),
     'pr:open': (args) => pr.open(deps, args),
     'pr:merge': (args) => pr.merge(deps, args),
     'pr:refresh-all': () => pr.refreshAll(deps),

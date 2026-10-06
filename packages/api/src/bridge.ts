@@ -378,7 +378,14 @@ export interface DecoratedIssue extends Issue {
   /** The card's pull request while it sits in the PR column. */
   pullRequest?: PullRequestPayload | null;
   /** The registered workspace the card acts on, for its colour and name. */
-  workspace?: { id: string; name: string; color: string } | null;
+  workspace?: {
+    id: string;
+    name: string;
+    color: string;
+    /** Whether its cards wait for human review / go through a PR. */
+    review: boolean;
+    pr: boolean;
+  } | null;
 }
 
 /** Stages a workspace's cards go through after the agent works. */
@@ -1034,6 +1041,10 @@ export interface BridgeChannels {
     result: WorkspaceProfilePayload;
   };
   'workspace-profiles:remove': { args: { id: string }; result: { removed: boolean } };
+  'cards:approve': {
+    args: { number: IssueRef };
+    result: { outcome: 'pr-opened' | 'merged' };
+  };
   'pr:open': { args: { number: IssueRef }; result: PullRequestPayload };
   'pr:merge': { args: { number: IssueRef }; result: PullRequestPayload };
   'pr:refresh-all': { args: void; result: { changed: boolean } };

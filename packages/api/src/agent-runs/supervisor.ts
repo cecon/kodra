@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import { EventEmitter } from 'node:events';
 import {
   createWorktree as defaultCreateWorktree,
@@ -44,6 +45,7 @@ import {
   type CheckChangeListener,
 } from '../checks-changed.js';
 import type { AgentMemoryClient } from '../memory/client.js';
+import type { WorkspaceRegistry } from '../workspace-registry.js';
 import { projectIdFromPath, resolveMemoryConfig } from '../memory/config.js';
 import { createAgentMemoryProvider, type MemoryProvider } from '../memory/provider.js';
 import {
@@ -90,6 +92,16 @@ export interface CreateSupervisorOptions {
    * workspace (local or cloud-bound) is currently active.
    */
   repoPath: string | (() => string);
+  /**
+   * App-level workspace registry. A card that carries a workspace runs in
+   * that workspace's repo (and base branch) instead of `repoPath`.
+   */
+  registry?: WorkspaceRegistry;
+  /**
+   * Folder holding agent worktrees, one subfolder per repo, instead of
+   * `<repo>/.kodra/worktrees`: keeps the repos themselves clean.
+   */
+  worktreesRoot?: string;
   startAgentRun?: (opts: StartAgentRunOptions) => AgentRunHandle;
   createWorktree?: (input: CreateWorktreeInput) => Promise<Worktree>;
   stampWorktreeIdentity?: (
@@ -481,6 +493,18 @@ function applyKanbotsCommand(
     };
   }
   return { prompt, appendSystemPrompt };
+}
+
+/**
+ * `<root>/<repo-name>-<hash>/<leaf>`: the leaf (issue-<slug>-<run>) as the
+ * repo-local default would name it, under a per-repo folder whose short
+ * hash keeps two repos with the same folder name apart.
+ */
+export function centralWorktreePath(root: string, repoPath: string, repoDefault: string): string {
+  const repoKey = resolvePath(repoPath).toLowerCase();
+  const hash = createHash('sha1').update(repoKey).digest('hex').slice(0, 8);
+  const name = basename(resolvePath(repoPath)).replace(/[^a-zA-Z0-9._-]/g, '_') || 'repo';
+  return join(root, `${name}-${hash}`, basename(repoDefault));
 }
 
 export async function createSupervisor(opts: CreateSupervisorOptions): Promise<AgentSupervisor> {
@@ -1604,7 +1628,14 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
     // supervisor stays permissive.
     let repoPath = resolveRepoPath();
     let workspaceRepoTarget: string | null = null;
-    if (input.repoId !== undefined) {
+    // The card's registered workspace decides where the agent works.
+    const workspaceId = store.localIssues.findByNumber(input.issueNumber)?.workspaceId ?? null;
+    const profile = workspaceId ? (opts.registry?.get(workspaceId) ?? null) : null;
+    if (profile) {
+      repoPath = profile.path;
+      workspaceRepoTarget = profile.baseBranch;
+    }
+    if (input.repoId !== undefined && !profile) {
       const repoRow = store.workspaceRepos.findById(input.repoId);
       if (repoRow) {
         repoPath = repoRow.repoPath;
@@ -1631,19 +1662,24 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
     // v1: per-repo via repoPath; workspaceId/team scoping is a future refinement per ADR-0004.
     runMemoryProjects.set(run.id, memoryProjectId(repoPath));
     runIssueNumbers.set(run.id, input.issueNumber);
+    const repoDefaultPath = defaultWorktreePath({
+      repoPath,
+      issueNumber: input.issueNumber,
+      runId: run.id,
+    });
     const worktreePath =
       input.worktreePath ??
-      defaultWorktreePath({
-        repoPath,
-        issueNumber: input.issueNumber,
-        runId: run.id,
-      });
+      (opts.worktreesRoot
+        ? centralWorktreePath(opts.worktreesRoot, repoPath, repoDefaultPath)
+        : repoDefaultPath);
     // Persist branch + worktree before the slow worktree-creation awaits so
     // that any `listActiveForRepo` read during that window sees a row with
     // branchName populated, not null.
     run = store.agentRuns.update(run.id, {
       worktreePath,
       baseBranch: baseResolution.ref,
+      workspaceId: profile?.id ?? null,
+      repoPath,
       ...(input.worktreePath !== undefined
         ? { branchName: input.branchName ?? null }
         : { branchName: branch }),

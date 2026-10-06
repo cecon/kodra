@@ -71,7 +71,7 @@ export async function runChecks(deps: RunChecksDeps, args: RunChecksArgs): Promi
   }
   for (const kind of kinds) queued.add(kind);
 
-  const overrides = await loadCheckOverrides(deps);
+  const overrides = await loadCheckOverrides(deps, run.repoPath ?? deps.config.repoPath ?? null);
   const cwd = run.worktreePath;
   // Run each check the way the project defines it (its package manager and
   // scripts); fall back to the configured/default command otherwise.
@@ -129,12 +129,15 @@ export function finishCheck(
   return check;
 }
 
+/** Check commands configured in a repo's `.kodra/config.json` (default:
+ *  the opened repo). */
 export async function loadCheckOverrides(
   deps: HandlerDeps,
+  repoPath: string | null = deps.config.repoPath ?? null,
 ): Promise<CheckCommandOverrides | undefined> {
-  if (!deps.config.repoPath) return undefined;
+  if (!repoPath) return undefined;
   try {
-    const cfg = await readWorkspaceConfig(deps.config.repoPath);
+    const cfg = await readWorkspaceConfig(repoPath);
     return cfg?.checks;
   } catch {
     return undefined;
