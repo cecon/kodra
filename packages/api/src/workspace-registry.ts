@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { WorkspaceProfilePayload, WorkspaceStages } from './bridge.js';
+import type {
+  WorkspaceProfilePayload,
+  WorkspaceScriptsPayload,
+  WorkspaceStages,
+} from './bridge.js';
 
 /**
  * The app-level registry of workspaces: the repos cards can act on. Each
@@ -40,11 +44,25 @@ export interface SaveWorkspaceInput {
   color?: string;
   baseBranch?: string | null;
   stages?: Partial<WorkspaceStages>;
+  scripts?: WorkspaceScriptsPayload;
 }
 
 interface RegistryFile {
   version: 1;
   workspaces: WorkspaceProfilePayload[];
+}
+
+/** Trimmed, non-empty scripts only; undefined when none is set. */
+function cleanScripts(
+  scripts: WorkspaceScriptsPayload | undefined,
+): { scripts: WorkspaceScriptsPayload } | undefined {
+  if (!scripts) return undefined;
+  const out: WorkspaceScriptsPayload = {};
+  const dev = scripts.devServer?.trim();
+  const setup = scripts.setup?.trim();
+  if (dev) out.devServer = dev;
+  if (setup) out.setup = setup;
+  return Object.keys(out).length > 0 ? { scripts: out } : undefined;
 }
 
 export class WorkspaceRegistryError extends Error {
@@ -116,6 +134,7 @@ export class WorkspaceRegistry {
       baseBranch:
         input.baseBranch !== undefined ? input.baseBranch : (existing?.baseBranch ?? null),
       stages: { ...DEFAULT_STAGES, ...existing?.stages, ...input.stages },
+      ...(cleanScripts(input.scripts ?? existing?.scripts) ?? {}),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
     data.workspaces = existing

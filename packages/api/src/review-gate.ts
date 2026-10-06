@@ -92,12 +92,18 @@ ${describeChanges(changes)}`,
     if (committed.status === 'pass') void advanceIfPassed(deps, runId);
     return [committed];
   }
+  // The workspace's setup script prepares the worktree when it has one;
+  // otherwise missing dependencies are installed from the lockfile.
+  const setup = profile?.scripts?.setup;
   const needsInstall =
     project.packageManager !== null &&
     !project.hasNodeModules &&
     checks.some((c) => c.command === project.packageManager);
-  const install =
-    needsInstall && project.packageManager ? installCommand(project.packageManager) : null;
+  const install: CheckCommand | null = setup
+    ? shellCommand('install', setup)
+    : needsInstall && project.packageManager
+      ? installCommand(project.packageManager)
+      : null;
 
   const controller = new AbortController();
   running.set(runId, controller);
@@ -156,6 +162,14 @@ ${describeChanges(changes)}`,
     });
 
   return [committed, ...rows];
+}
+
+/** A shell command line as a check: cmd on Windows (runCheck spawns it
+ *  through a shell there), `sh -c` elsewhere. */
+function shellCommand(kind: CheckCommand['kind'], line: string): CheckCommand {
+  return process.platform === 'win32'
+    ? { kind, command: line, args: [] }
+    : { kind, command: 'sh', args: ['-c', line] };
 }
 
 /** A green gate moves on by itself when the workspace skips human review. */

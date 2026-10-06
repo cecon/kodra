@@ -22,7 +22,6 @@ import {
   Book1,
   Chart2,
   Cloud,
-  Code,
   Copy,
   Cpu,
   Element3,
@@ -176,7 +175,6 @@ function DrawerNav({
         <NavAction title="Providers" icon={Flash} onClick={nav.onOpenProviders} />
         <NavAction title="Cloud" icon={Cloud} onClick={nav.onOpenCloud} />
         <NavAction title="House rules" icon={Book1} onClick={nav.onOpenRules} />
-        <NavAction title="Repo scripts" icon={Code} onClick={nav.onOpenScripts} />
         <NavAction title="Workspaces" icon={Hierarchy} onClick={nav.onOpenRepos} />
         <NavAction title="Card templates" icon={Copy} onClick={nav.onOpenCardTemplates} />
         <NavAction title="Memory" icon={Cpu} onClick={nav.onOpenMemory} />

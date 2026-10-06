@@ -26,6 +26,13 @@ const saveSchema = z
       .optional(),
     baseBranch: z.string().min(1).nullable().optional(),
     stages: stagesSchema.optional(),
+    scripts: z
+      .object({
+        devServer: z.string().max(2_000).optional(),
+        setup: z.string().max(2_000).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -50,6 +57,7 @@ export function save(deps: HandlerDeps, args: unknown): WorkspaceProfilePayload 
       ...(parsed.color !== undefined ? { color: parsed.color } : {}),
       ...(parsed.baseBranch !== undefined ? { baseBranch: parsed.baseBranch } : {}),
       ...(parsed.stages !== undefined ? { stages: stripUndefined(parsed.stages) } : {}),
+      ...(parsed.scripts !== undefined ? { scripts: stripUndefined(parsed.scripts) } : {}),
     });
   } catch (err) {
     if (err instanceof WorkspaceRegistryError) throw badRequest(err.message);

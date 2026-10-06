@@ -54,6 +54,18 @@ describe('WorkspaceRegistry', () => {
     expect(() => registry.save({ name: 'again', path })).toThrow(/already the workspace/);
   });
 
+  it('keeps trimmed scripts and drops empty ones', async () => {
+    const { registry, repo } = await setup();
+    const w = registry.save({
+      name: 'Livraria',
+      path: await repo('livraria'),
+      scripts: { devServer: '  npm run dev:web ', setup: '   ' },
+    });
+    expect(w.scripts).toEqual({ devServer: 'npm run dev:web' });
+    const cleared = registry.save({ id: w.id, name: w.name, path: w.path, scripts: {} });
+    expect(cleared.scripts).toBeUndefined();
+  });
+
   it('removes a workspace', async () => {
     const { registry, repo } = await setup();
     const w = registry.save({ name: 'tmp', path: await repo('tmp') });

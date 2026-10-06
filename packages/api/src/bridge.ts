@@ -419,7 +419,16 @@ export interface WorkspaceProfilePayload {
   /** Branch work is based on and merged into; null = repo default. */
   baseBranch: string | null;
   stages: WorkspaceStages;
+  /** Commands for this repo: the branch preview's dev server, and the
+   *  setup that prepares a fresh worktree (replaces the automatic
+   *  dependency install before checks). */
+  scripts?: WorkspaceScriptsPayload;
   createdAt: string;
+}
+
+export interface WorkspaceScriptsPayload {
+  devServer?: string;
+  setup?: string;
 }
 
 /** A card's pull request as last seen on GitHub. */
@@ -1045,6 +1054,7 @@ export interface BridgeChannels {
       color?: string;
       baseBranch?: string | null;
       stages?: Partial<WorkspaceStages>;
+      scripts?: WorkspaceScriptsPayload;
     };
     result: WorkspaceProfilePayload;
   };

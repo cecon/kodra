@@ -66,12 +66,14 @@ export async function startRunPreview(
 
   const startImpl: StartPreviewImpl = deps.startPreviewImpl ?? ((opts) => startPreview(opts));
 
-  // Per-repo dev-server override, set via Settings → Repos. Falls back to
-  // dispatcher's default `pnpm dev` if the user hasn't configured one.
-  let startCommandLine: string | undefined;
-  if (deps.config.repoPath) {
+  // Dev-server command: the card's workspace (Configure → Workspaces), else
+  // the run repo's .kodra/config.json, else the dispatcher's `pnpm dev`.
+  const profile = run.workspaceId ? deps.registry?.get(run.workspaceId) : undefined;
+  let startCommandLine: string | undefined = profile?.scripts?.devServer;
+  const repoPath = run.repoPath ?? deps.config.repoPath;
+  if (startCommandLine === undefined && repoPath) {
     try {
-      const cfg = await readWorkspaceConfig(deps.config.repoPath);
+      const cfg = await readWorkspaceConfig(repoPath);
       startCommandLine = cfg?.scripts?.devServer;
     } catch {
       // ignore — fall back to dispatcher default.

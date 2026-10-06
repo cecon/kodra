@@ -46,6 +46,8 @@ interface Draft {
   color: string;
   baseBranch: string;
   stages: WorkspaceStages;
+  devServer: string;
+  setup: string;
 }
 
 function draftOf(w: WorkspaceProfilePayload | null, index: number): Draft {
@@ -57,6 +59,8 @@ function draftOf(w: WorkspaceProfilePayload | null, index: number): Draft {
         color: w.color,
         baseBranch: w.baseBranch ?? '',
         stages: w.stages,
+        devServer: w.scripts?.devServer ?? '',
+        setup: w.scripts?.setup ?? '',
       }
     : {
         name: '',
@@ -64,6 +68,8 @@ function draftOf(w: WorkspaceProfilePayload | null, index: number): Draft {
         color: COLORS[index % COLORS.length]!,
         baseBranch: '',
         stages: DEFAULT_STAGES,
+        devServer: '',
+        setup: '',
       };
 }
 
@@ -110,6 +116,7 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
         color: draft.color,
         baseBranch: draft.baseBranch.trim() || null,
         stages: draft.stages,
+        scripts: { devServer: draft.devServer, setup: draft.setup },
       });
       setDraft(null);
       await reload();
@@ -227,6 +234,30 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
                     }}
                   />
                 ))}
+              </Stack>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Scripts
+              </Typography>
+              <Stack spacing={1.5}>
+                <TextField
+                  label="Dev server (branch preview)"
+                  size="small"
+                  placeholder="pnpm dev"
+                  value={draft.devServer}
+                  onChange={(e) => setDraft({ ...draft, devServer: e.target.value })}
+                  helperText="Runs in the card's worktree with PORT set; default: pnpm dev."
+                />
+                <TextField
+                  label="Setup (fresh worktree)"
+                  size="small"
+                  placeholder="npm ci"
+                  value={draft.setup}
+                  onChange={(e) => setDraft({ ...draft, setup: e.target.value })}
+                  helperText="Runs before the checks instead of the automatic dependency install."
+                />
               </Stack>
             </Box>
 
