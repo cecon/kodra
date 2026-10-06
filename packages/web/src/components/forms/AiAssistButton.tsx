@@ -34,7 +34,7 @@ export function AiAssistButton({
 }: AiAssistButtonProps) {
   const disabled = busy || disabledReason !== null;
   return (
-    <Tooltip title={busy ? 'Working…' : (disabledReason ?? description)}>
+    <Tooltip title={busy ? 'Trabalhando…' : (disabledReason ?? description)}>
       {/* span: a disabled button fires no events, so the tooltip needs a host. */}
       <span>
         <Button
@@ -57,7 +57,7 @@ export function AiAssistButton({
             '& .MuiButton-startIcon': { mr: 0.5 },
           }}
         >
-          {busy ? 'Working…' : label}
+          {busy ? 'Trabalhando…' : label}
         </Button>
       </span>
     </Tooltip>

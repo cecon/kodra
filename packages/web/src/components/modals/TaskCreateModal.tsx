@@ -48,9 +48,9 @@ function AiNote({
   if (undo?.mode !== mode) return null;
   return (
     <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
-      Rewritten by AI ·{' '}
+      Reescrito pela IA ·{' '}
       <button type="button" className="kb-link-btn" onClick={onUndo}>
-        Undo
+        Desfazer
       </button>
     </div>
   );
@@ -61,11 +61,11 @@ type Priority = 'p0' | 'p1' | 'p2' | 'p3';
 type Template = 'bug' | 'feature' | 'refactor' | 'review' | 'spike';
 
 const TEMPLATES: Array<{ id: Template; icon: string; name: string }> = [
-  { id: 'bug', icon: '!', name: 'Bug fix' },
-  { id: 'feature', icon: '+', name: 'Feature' },
-  { id: 'refactor', icon: '~', name: 'Refactor' },
-  { id: 'review', icon: '?', name: 'Review' },
-  { id: 'spike', icon: '*', name: 'Spike' },
+  { id: 'bug', icon: '!', name: 'Correção de bug' },
+  { id: 'feature', icon: '+', name: 'Funcionalidade' },
+  { id: 'refactor', icon: '~', name: 'Refatoração' },
+  { id: 'review', icon: '?', name: 'Revisão' },
+  { id: 'spike', icon: '*', name: 'Investigação' },
 ];
 
 export interface TaskCreateModalProps {
@@ -263,7 +263,7 @@ export function TaskCreateModal({
     if (images.length === 0) return;
     e.preventDefault();
     for (const file of images) {
-      const token = `![uploading image…](kanbots-pending:${Date.now()}-${Math.random().toString(36).slice(2, 8)})`;
+      const token = `![enviando imagem…](kanbots-pending:${Date.now()}-${Math.random().toString(36).slice(2, 8)})`;
       insertAtCursor(token);
       setPasting((n) => n + 1);
       try {
@@ -273,7 +273,7 @@ export function TaskCreateModal({
       } catch (err) {
         replaceText(token, '');
         setError(
-          `Failed to upload pasted image: ${err instanceof Error ? err.message : String(err)}`,
+          `Não foi possível enviar a imagem colada: ${err instanceof Error ? err.message : String(err)}`,
         );
       } finally {
         setPasting((n) => Math.max(0, n - 1));
@@ -288,7 +288,7 @@ export function TaskCreateModal({
   const previewIssue: Issue = useMemo(
     () => ({
       number: 0,
-      title: title || 'Untitled task',
+      title: title || 'Tarefa sem título',
       body,
       state: 'open',
       // Same labels submit() creates: Inbox (no status), agent idle.
@@ -313,7 +313,8 @@ export function TaskCreateModal({
   const dirty =
     title.trim() !== '' || customNumber.trim() !== '' || body.trim() !== initialDescription.trim();
   const requestClose = useCallback((): void => {
-    if (dirty && !window.confirm('Discard this task? What you wrote will be lost.')) return;
+    if (dirty && !window.confirm('Descartar esta tarefa? O que você escreveu será perdido.'))
+      return;
     onClose();
   }, [dirty, onClose]);
 
@@ -329,11 +330,11 @@ export function TaskCreateModal({
     if (e) e.preventDefault();
     if (submitting) return;
     if (pasting > 0) {
-      setError('Wait for the pasted image upload to finish');
+      setError('Aguarde o envio da imagem colada terminar');
       return;
     }
     if (!title.trim()) {
-      setError('Title is required');
+      setError('O título é obrigatório');
       return;
     }
     const trimmedCustomNumber = customNumber.trim();
@@ -407,12 +408,12 @@ export function TaskCreateModal({
         <div className="kb-modal-head">
           <Logo size={11} withWordmark />
           <span style={{ color: 'var(--ink-4)' }}>·</span>
-          <h2>New task</h2>
+          <h2>Nova tarefa</h2>
           <span className="grow" />
           <span style={{ color: 'var(--ink-3)', fontSize: 11.5 }}>
-            Press <span className="kb-kbd">{shortcut('mod+enter')}</span> to create
+            <span className="kb-kbd">{shortcut('mod+enter')}</span> para criar
           </span>
-          <button type="button" className="x-btn" onClick={requestClose} aria-label="Close">
+          <button type="button" className="x-btn" onClick={requestClose} aria-label="Fechar">
             <svg
               width="14"
               height="14"
@@ -432,15 +433,15 @@ export function TaskCreateModal({
               {templates.length > 0 ? (
                 <div className="kb-field">
                   <label className="kb-field-label">
-                    From template
-                    <span className="kb-field-hint">prefill title, body, labels</span>
+                    Modelo de card
+                    <span className="kb-field-hint">preenche título, descrição e labels</span>
                   </label>
                   <select
                     className="kb-input"
                     value={templateId === '' ? '' : String(templateId)}
                     onChange={onPickTemplate}
                   >
-                    <option value="">(start from scratch)</option>
+                    <option value="">(começar do zero)</option>
                     {templates.map((t) => (
                       <option key={t.id} value={String(t.id)}>
                         {t.name}
@@ -453,7 +454,7 @@ export function TaskCreateModal({
               <div className="kb-field">
                 <label className="kb-field-label">
                   Workspace
-                  <span className="kb-field-hint">the repo the agent works in</span>
+                  <span className="kb-field-hint">o repositório onde o agente trabalha</span>
                 </label>
                 {profiles && profiles.length > 0 ? (
                   <div className="kb-templates">
@@ -481,8 +482,8 @@ export function TaskCreateModal({
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                    No workspaces yet: agents need one to know which repo to work in. Add your repos
-                    in Configure → Workspaces.
+                    Nenhum workspace ainda: o agente precisa de um para saber em qual repositório
+                    trabalhar. Cadastre seus repositórios em Configure → Workspaces.
                   </div>
                 )}
               </div>
@@ -490,18 +491,18 @@ export function TaskCreateModal({
               {/* TITLE */}
               <div className="kb-field">
                 <label className="kb-field-label" htmlFor="kb-task-title">
-                  Title
+                  Título
                   <span className="kb-field-hint kb-field-hint-ai">
-                    → becomes branch + PR title
+                    → vira o nome da branch e o título do PR
                     <AiAssistButton
-                      label="Suggest title"
-                      description="Write a title from the description with AI"
+                      label="Sugerir título"
+                      description="Escreve um título a partir da descrição, com IA"
                       busy={aiBusy === 'suggest-title'}
                       disabledReason={
                         aiBusy !== null
-                          ? 'AI is busy'
+                          ? 'A IA está ocupada'
                           : title.trim() === '' && body.trim() === ''
-                            ? 'Write a description first'
+                            ? 'Escreva uma descrição antes'
                             : null
                       }
                       onClick={() => void runAiAssist('suggest-title')}
@@ -511,7 +512,7 @@ export function TaskCreateModal({
                 <input
                   id="kb-task-title"
                   className="kb-input title-input"
-                  placeholder="e.g. Replace password login with passkey-first onboarding"
+                  placeholder="ex.: Trocar login por senha por onboarding com passkey"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={onTitleKey}
@@ -529,7 +530,7 @@ export function TaskCreateModal({
                       minWidth: 0,
                     }}
                   >
-                    <span style={{ color: 'var(--ink-4)', flexShrink: 0 }}>branch will be</span>
+                    <span style={{ color: 'var(--ink-4)', flexShrink: 0 }}>a branch será</span>
                     <span
                       style={{
                         fontFamily: 'var(--ff-mono)',
@@ -550,7 +551,7 @@ export function TaskCreateModal({
               {!isCloudMode() ? (
                 <div className="kb-field">
                   <label className="kb-field-label">
-                    Issue ID (opcional)
+                    ID da tarefa (opcional)
                     <span className="kb-field-hint">Vazio = número automático</span>
                   </label>
                   <input
@@ -565,7 +566,7 @@ export function TaskCreateModal({
 
               {/* TEMPLATE */}
               <div className="kb-field">
-                <label className="kb-field-label">Template</label>
+                <label className="kb-field-label">Modelo</label>
                 <div className="kb-templates">
                   {TEMPLATES.map((t) => (
                     <button
@@ -584,18 +585,18 @@ export function TaskCreateModal({
               {/* DESCRIPTION */}
               <div className="kb-field">
                 <label className="kb-field-label" htmlFor="kb-task-description">
-                  Description
+                  Descrição
                   <span className="kb-field-hint kb-field-hint-ai">
-                    Markdown · use AC: for acceptance criteria
+                    Markdown · use AC: para critérios de aceite
                     <AiAssistButton
-                      label="Improve writing"
-                      description="Rewrite the description with AI: clearer, structured, with acceptance criteria"
+                      label="Melhorar escrita"
+                      description="Reescreve a descrição com IA: mais clara, estruturada e com critérios de aceite"
                       busy={aiBusy === 'improve-description'}
                       disabledReason={
                         aiBusy !== null
-                          ? 'AI is busy'
+                          ? 'A IA está ocupada'
                           : body.trim() === ''
-                            ? 'Write a description first'
+                            ? 'Escreva uma descrição antes'
                             : null
                       }
                       onClick={() => void runAiAssist('improve-description')}
@@ -609,8 +610,8 @@ export function TaskCreateModal({
                   onChange={setBody}
                   onPaste={(e) => void handlePaste(e)}
                   rows={10}
-                  ariaLabel="Task description"
-                  placeholder={`What is the user-facing outcome?\n\nAC:\n- A new user can register a passkey on first login\n- Existing users see a banner with passkey CTA\n\nTip: paste an image (${shortcut('mod+v')}) to attach it.`}
+                  ariaLabel="Descrição da tarefa"
+                  placeholder={`Qual é o resultado para o usuário?\n\nAC:\n- Um usuário novo consegue cadastrar uma passkey no primeiro login\n- Usuários existentes veem um aviso convidando para a passkey\n\nDica: cole uma imagem (${shortcut('mod+v')}) para anexá-la.`}
                 />
                 <AiNote
                   mode="improve-description"
@@ -620,7 +621,7 @@ export function TaskCreateModal({
                 />
                 {pasting > 0 ? (
                   <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
-                    Uploading {pasting} image{pasting === 1 ? '' : 's'}…
+                    Enviando {pasting} imagem{pasting === 1 ? '' : 'ns'}…
                   </div>
                 ) : null}
               </div>
@@ -637,7 +638,7 @@ export function TaskCreateModal({
                         marginBottom: 5,
                       }}
                     >
-                      TYPE
+                      TIPO
                     </div>
                     <div className="kb-seg">
                       {(['feat', 'fix', 'chore', 'infra', 'docs'] as Tag[]).map((t) => (
@@ -660,7 +661,7 @@ export function TaskCreateModal({
                         marginBottom: 5,
                       }}
                     >
-                      PRIORITY
+                      PRIORIDADE
                     </div>
                     <div className="kb-seg">
                       {(['p0', 'p1', 'p2', 'p3'] as Priority[]).map((p) => (
@@ -682,7 +683,7 @@ export function TaskCreateModal({
 
           <aside className="kb-modal-aside">
             <div className="kb-mas-block">
-              <div className="kb-mas-h">How it'll appear</div>
+              <div className="kb-mas-h">Como vai aparecer</div>
               <div
                 style={{
                   fontSize: 10,
@@ -703,7 +704,7 @@ export function TaskCreateModal({
 
         <div className="kb-modal-foot">
           <span className="hint">
-            Cards start in the Inbox. Move one to In progress to start its agent.
+            Os cards nascem no Inbox. Mova para In progress para o agente começar.
           </span>
           {error ? (
             <span style={{ color: 'var(--failed)', fontSize: 11.5 }} role="alert">
@@ -712,15 +713,15 @@ export function TaskCreateModal({
           ) : null}
           <span className="grow" />
           <button type="button" className="kb-btn ghost" onClick={requestClose}>
-            Cancel
+            Cancelar
           </button>
           <SplitButton
-            primaryLabel={submitting ? 'Creating…' : 'Create task'}
+            primaryLabel={submitting ? 'Criando…' : 'Criar tarefa'}
             primaryDisabled={submitting || pasting > 0 || !title.trim()}
             onPrimary={() => void submit()}
             options={[
               {
-                label: 'Save as draft (Backlog)',
+                label: 'Salvar como rascunho (Backlog)',
                 onPick: () => void submitAsDraft(),
               },
             ]}
@@ -772,8 +773,8 @@ function SplitButton({
         type="button"
         className="kb-btn primary"
         onClick={() => setOpen((v) => !v)}
-        aria-label="More options"
-        title="More options"
+        aria-label="Mais opções"
+        title="Mais opções"
       >
         ▾
       </button>
