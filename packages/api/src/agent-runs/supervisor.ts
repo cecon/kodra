@@ -512,6 +512,16 @@ export function centralWorktreePath(root: string, repoPath: string, repoDefault:
   return join(root, `${name}-${hash}`, basename(repoDefault));
 }
 
+/** `branch`, or `branch-2`, `branch-3`… — the first not taken in the repo. */
+export async function freeBranchName(repoPath: string, branch: string): Promise<string> {
+  const exists = createGitRefExists(repoPath);
+  let candidate = branch;
+  for (let n = 2; n < 100 && (await exists(`refs/heads/${candidate}`)); n += 1) {
+    candidate = `${branch}-${n}`;
+  }
+  return candidate;
+}
+
 export async function createSupervisor(opts: CreateSupervisorOptions): Promise<AgentSupervisor> {
   const { store } = opts;
   const resolveRepoPath = (): string =>
@@ -1630,7 +1640,7 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
       ...(input.chatSessionId !== undefined ? { chatSessionId: input.chatSessionId } : {}),
     });
     if (input.cleanup) runCleanups.set(run.id, input.cleanup);
-    const branch =
+    let branch =
       input.branchName ??
       defaultBranchName({
         issueNumber: input.issueNumber,
@@ -1657,6 +1667,9 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
         workspaceRepoTarget = repoRow.targetBranch;
       }
     }
+    // Issue and run numbers restart on a fresh board, and repos keep old
+    // agent branches: never collide with a branch that already exists.
+    if (input.branchName === undefined) branch = await freeBranchName(repoPath, branch);
     const folderDefault = store.folders.findByPath(repoPath)?.defaultBranch ?? null;
     const baseResolution = await resolveBaseRef({
       explicit: input.baseRef,

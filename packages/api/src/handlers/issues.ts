@@ -246,6 +246,16 @@ function withReviewGate(deps: HandlerDeps, issue: DecoratedIssue): DecoratedIssu
         pr: profile.stages.pr,
       }
     : null;
+  // In progress with no agent because its last run failed: say so.
+  if (issue.status === 'inProgress' && issue.activeRun === null && issue.agent !== 'queued') {
+    const thread = deps.store.threads.findByIssue(
+      deps.config.owner,
+      deps.config.repo,
+      issue.number,
+    );
+    const latest = thread ? deps.store.agentRuns.findLatestForThread(thread.id) : null;
+    if (latest?.status === 'failed') issue.agent = 'failed';
+  }
   // PR column cards show their PR and its CI, as last seen by the watcher.
   if (issue.status === 'pr') issue.pullRequest = knownPullRequest(deps, issue.number);
   return issue;

@@ -94,8 +94,9 @@ export function allowedTargets(issue: Issue): ReadonlyArray<StatusKey | null> {
     case 'todo':
       return ['inProgress'];
     case 'inProgress':
-      // Waiting for a free agent slot: it can still be taken back.
-      return issue.agent === 'queued' ? [null, 'todo'] : [];
+      // No agent on it (queued, or its run failed or was stopped): it can be
+      // taken back; ⋯ → Run agent tries again.
+      return [null, 'todo'];
     case 'review': {
       const gate = reviewGateOf(issue);
       if (gate?.state === 'checking') return [];
