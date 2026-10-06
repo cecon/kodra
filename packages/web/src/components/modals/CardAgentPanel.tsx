@@ -67,6 +67,11 @@ export function fmtTokens(n: number | null): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
+/** `origin/main` → `main`: the base as people name it. */
+export function branchName(ref: string): string {
+  return ref.replace(/^refs\/(heads|remotes)\//, '').replace(/^origin\//, '');
+}
+
 export const mono = { fontFamily: 'var(--ff-mono, monospace)' };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -120,10 +125,7 @@ export function ContextBlock({ title, text }: { title: string; text: string | nu
         '&:before': { display: 'none' },
       }}
     >
-      <AccordionSummary
-        expandIcon={<IconsaxIcon icon={ArrowDown2} size={14} />}
-        sx={{ minHeight: 36 }}
-      >
+      <AccordionSummary sx={{ minHeight: 36 }}>
         <Typography variant="subtitle2">{title}</Typography>
       </AccordionSummary>
       <AccordionDetails sx={{ pt: 0 }}>
@@ -347,7 +349,7 @@ export function CardAgentPanel({
               {run.baseBranch ? (
                 <Box component="span" sx={{ color: 'text.secondary' }}>
                   {' '}
-                  → {run.baseBranch}
+                  → {branchName(run.baseBranch)}
                 </Box>
               ) : null}
             </Typography>

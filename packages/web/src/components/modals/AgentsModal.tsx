@@ -12,6 +12,7 @@ import { api } from '../../api.js';
 import { dispatchIssuesRefetch } from '../../hooks/useIssues.js';
 import type { AgentRun } from '../../types.js';
 import {
+  branchName,
   ContextBlock,
   fmtElapsed,
   fmtTokens,
@@ -190,7 +191,7 @@ export function AgentsModal({
                   {run.baseBranch ? (
                     <Box component="span" sx={{ color: 'text.secondary' }}>
                       {' '}
-                      → {run.baseBranch}
+                      → {branchName(run.baseBranch)}
                     </Box>
                   ) : null}
                 </Typography>
