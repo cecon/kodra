@@ -1,16 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import Grid from '@mui/material/Grid';
+import InputAdornment from '@mui/material/InputAdornment';
+import InputLabel from '@mui/material/InputLabel';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { WorkspaceProfilePayload, WorkspaceStages } from '@kanbots/api';
+import { IconsaxIcon } from '@kanbots/ui';
+import { Add, Edit2, Folder2, Trash } from 'iconsax-react';
 import { api } from '../../api.js';
 import { getBridge } from '../../desktop-bridge.js';
 import { dispatchIssuesRefetch } from '../../hooks/useIssues.js';
@@ -73,23 +79,111 @@ function draftOf(w: WorkspaceProfilePayload | null, index: number): Draft {
       };
 }
 
-/** One line per stage, in flow order, for the list. */
-function stageSummary(s: WorkspaceStages): string {
+/** The stages in flow order, as chips for the list. */
+function stageChips(s: WorkspaceStages): string[] {
   return [
-    'agent',
-    s.checks ? `checks (${s.checkKinds.join(', ') || 'commit only'})` : null,
-    s.review ? 'your review' : null,
-    s.pr ? 'PR + CI' : 'local merge',
-    s.pr && s.autoMerge ? 'auto merge' : null,
-  ]
-    .filter(Boolean)
-    .join(' → ');
+    'Agent',
+    s.checks ? `Checks${s.checkKinds.length ? ` (${s.checkKinds.join(', ')})` : ''}` : null,
+    s.review ? 'Your review' : null,
+    s.pr ? 'PR + CI' : 'Local merge',
+    s.pr && s.autoMerge ? 'Auto merge' : null,
+  ].filter((x): x is string => x !== null);
+}
+
+/** A labelled field, Able Pro style: the label above the input. */
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: ReactNode;
+}) {
+  return (
+    <Stack spacing={1}>
+      <InputLabel htmlFor={htmlFor}>{label}</InputLabel>
+      {children}
+    </Stack>
+  );
+}
+
+function Section({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Stack spacing={2}>
+      <Box>
+        <Typography variant="h6">{title}</Typography>
+        {caption ? (
+          <Typography variant="caption" color="text.secondary">
+            {caption}
+          </Typography>
+        ) : null}
+      </Box>
+      {children}
+    </Stack>
+  );
+}
+
+/** One stage: a switch with a title and what it does. */
+function StageRow({
+  step,
+  title,
+  description,
+  checked,
+  disabled = false,
+  onChange,
+  children,
+}: {
+  step: number;
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (on: boolean) => void;
+  children?: ReactNode;
+}) {
+  return (
+    <Box
+      sx={{
+        p: 1.5,
+        border: 1,
+        borderColor: checked ? 'primary.main' : 'divider',
+        borderRadius: 1.5,
+        opacity: disabled ? 0.55 : 1,
+      }}
+    >
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+        <Chip size="small" label={step} sx={{ mt: 0.25, minWidth: 28 }} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1">{title}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {description}
+          </Typography>
+          {checked && children ? <Box sx={{ mt: 1 }}>{children}</Box> : null}
+        </Box>
+        <Switch
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          inputProps={{ 'aria-label': title }}
+        />
+      </Stack>
+    </Box>
+  );
 }
 
 /**
  * Configure → Workspaces: the repos cards can act on. Each has a colour
- * (its cards' stripe and chip on the board) and the stages its cards go
- * through after the agent works.
+ * (its cards' stripe and chip on the board), scripts, and the stages its
+ * cards go through after the agent works.
  */
 export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
   const [list, setList] = useState<WorkspaceProfilePayload[] | null>(null);
@@ -150,14 +244,20 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
   const setStages = (patch: Partial<WorkspaceStages>) =>
     draft && setDraft({ ...draft, stages: { ...draft.stages, ...patch } });
 
+  const editing = draft !== null;
   return (
     <ModalFrame
-      title="Workspaces"
+      title={
+        editing ? (draft.id ? `Edit ${draft.name || 'workspace'}` : 'New workspace') : 'Workspaces'
+      }
       onClose={onClose}
-      width={720}
-      footerHint="A workspace is a repo cards can act on. Its colour marks its cards on the board."
+      width={760}
+      muiBody
+      footerHint={
+        editing ? undefined : 'A workspace is a repo cards can act on; its colour marks its cards.'
+      }
       actions={
-        draft ? (
+        editing ? (
           <>
             <Button color="secondary" onClick={() => setDraft(null)} disabled={busy}>
               Cancel
@@ -166,118 +266,146 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
               variant="contained"
               onClick={() => void save()}
               disabled={busy || !draft.name.trim() || !draft.path.trim()}
+              sx={{ whiteSpace: 'nowrap' }}
             >
               {busy ? 'Saving…' : 'Save workspace'}
             </Button>
           </>
         ) : (
-          <Button variant="contained" onClick={() => setDraft(draftOf(null, list?.length ?? 0))}>
+          <Button
+            variant="contained"
+            startIcon={<IconsaxIcon icon={Add} size={18} />}
+            onClick={() => setDraft(draftOf(null, list?.length ?? 0))}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
             Add workspace
           </Button>
         )
       }
     >
-      <Stack spacing={2}>
+      <Stack spacing={3}>
         {error ? <Alert severity="error">{error}</Alert> : null}
 
-        {draft ? (
-          <Stack spacing={2}>
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-              <TextField
-                label="Name"
-                size="small"
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Base branch"
-                size="small"
-                placeholder="repo default"
-                value={draft.baseBranch}
-                onChange={(e) => setDraft({ ...draft, baseBranch: e.target.value })}
-                sx={{ width: 180 }}
-              />
-            </Stack>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <TextField
-                label="Repository folder"
-                size="small"
-                value={draft.path}
-                onChange={(e) => setDraft({ ...draft, path: e.target.value })}
-                sx={{ flex: 1 }}
-              />
-              <Button variant="outlined" color="secondary" onClick={() => void pickFolder()}>
-                Choose…
-              </Button>
-            </Stack>
-
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Card colour
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                {COLORS.map((c) => (
-                  <ButtonBase
-                    key={c}
-                    aria-label={`Colour ${c}`}
-                    aria-pressed={draft.color === c}
-                    onClick={() => setDraft({ ...draft, color: c })}
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      bgcolor: c,
-                      outline: draft.color === c ? '2px solid' : 'none',
-                      outlineColor: 'text.primary',
-                      outlineOffset: 2,
-                    }}
-                  />
-                ))}
-              </Stack>
-            </Box>
-
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Scripts
-              </Typography>
-              <Stack spacing={1.5}>
-                <TextField
-                  label="Dev server (branch preview)"
-                  size="small"
-                  placeholder="pnpm dev"
-                  value={draft.devServer}
-                  onChange={(e) => setDraft({ ...draft, devServer: e.target.value })}
-                  helperText="Runs in the card's worktree with PORT set; default: pnpm dev."
-                />
-                <TextField
-                  label="Setup (fresh worktree)"
-                  size="small"
-                  placeholder="npm ci"
-                  value={draft.setup}
-                  onChange={(e) => setDraft({ ...draft, setup: e.target.value })}
-                  helperText="Runs before the checks instead of the automatic dependency install."
-                />
-              </Stack>
-            </Box>
-
-            <Box>
-              <Typography variant="subtitle2">Stages</Typography>
-              <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
-                The agent always works first. Then, in this order:
-              </Typography>
-              <Stack spacing={0.5}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={draft.stages.checks}
-                      onChange={(e) => setStages({ checks: e.target.checked })}
+        {editing ? (
+          <>
+            <Section title="Repository" caption="The git repo cards of this workspace work in.">
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={8}>
+                  <Field label="Name" htmlFor="ws-name">
+                    <TextField
+                      id="ws-name"
+                      fullWidth
+                      placeholder="e.g. Livraria"
+                      value={draft.name}
+                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                     />
-                  }
-                  label="Local checks before review (dependencies, then the checks below)"
-                />
-                {draft.stages.checks ? (
-                  <Stack direction="row" spacing={1} sx={{ pl: 6 }}>
+                  </Field>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Field label="Base branch" htmlFor="ws-branch">
+                    <TextField
+                      id="ws-branch"
+                      fullWidth
+                      placeholder="repo default"
+                      value={draft.baseBranch}
+                      onChange={(e) => setDraft({ ...draft, baseBranch: e.target.value })}
+                    />
+                  </Field>
+                </Grid>
+                <Grid item xs={12}>
+                  <Field label="Folder" htmlFor="ws-path">
+                    <TextField
+                      id="ws-path"
+                      fullWidth
+                      placeholder="D:\projetos\my-repo"
+                      value={draft.path}
+                      onChange={(e) => setDraft({ ...draft, path: e.target.value })}
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <Button
+                              size="small"
+                              color="secondary"
+                              startIcon={<IconsaxIcon icon={Folder2} size={16} />}
+                              onClick={() => void pickFolder()}
+                            >
+                              Choose
+                            </Button>
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Field>
+                </Grid>
+                <Grid item xs={12}>
+                  <Field label="Card colour" htmlFor="ws-color">
+                    <Stack direction="row" spacing={1.25} id="ws-color">
+                      {COLORS.map((c) => (
+                        <ButtonBase
+                          key={c}
+                          aria-label={`Colour ${c}`}
+                          aria-pressed={draft.color === c}
+                          onClick={() => setDraft({ ...draft, color: c })}
+                          sx={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: '50%',
+                            bgcolor: c,
+                            outline: draft.color === c ? '2px solid' : 'none',
+                            outlineColor: 'text.primary',
+                            outlineOffset: 3,
+                          }}
+                        />
+                      ))}
+                    </Stack>
+                  </Field>
+                </Grid>
+              </Grid>
+            </Section>
+
+            <Divider />
+
+            <Section title="Scripts" caption="Optional commands, run in the card's worktree.">
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Field label="Dev server (branch preview)" htmlFor="ws-dev">
+                    <TextField
+                      id="ws-dev"
+                      fullWidth
+                      placeholder="pnpm dev"
+                      value={draft.devServer}
+                      onChange={(e) => setDraft({ ...draft, devServer: e.target.value })}
+                      helperText="PORT is set for it."
+                    />
+                  </Field>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Field label="Setup (fresh worktree)" htmlFor="ws-setup">
+                    <TextField
+                      id="ws-setup"
+                      fullWidth
+                      placeholder="npm ci"
+                      value={draft.setup}
+                      onChange={(e) => setDraft({ ...draft, setup: e.target.value })}
+                      helperText="Replaces the automatic dependency install."
+                    />
+                  </Field>
+                </Grid>
+              </Grid>
+            </Section>
+
+            <Divider />
+
+            <Section title="Stages" caption="The agent always works first; then, in this order:">
+              <Stack spacing={1.25}>
+                <StageRow
+                  step={1}
+                  title="Local checks"
+                  description="Before review: commit check, dependencies, then the checks you pick."
+                  checked={draft.stages.checks}
+                  onChange={(on) => setStages({ checks: on })}
+                >
+                  <Stack direction="row" spacing={1}>
                     {CHECK_KINDS.map(({ kind, label }) => (
                       <FormControlLabel
                         key={kind}
@@ -298,69 +426,63 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
                       />
                     ))}
                   </Stack>
-                ) : null}
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={draft.stages.review}
-                      onChange={(e) => setStages({ review: e.target.checked })}
-                    />
-                  }
-                  label="Human review: you approve before it moves on"
+                </StageRow>
+                <StageRow
+                  step={2}
+                  title="Your review"
+                  description="You approve the changes before they move on. Off: green checks approve by themselves."
+                  checked={draft.stages.review}
+                  onChange={(on) => setStages({ review: on })}
                 />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={draft.stages.pr}
-                      onChange={(e) =>
-                        setStages({
-                          pr: e.target.checked,
-                          autoMerge: e.target.checked && draft.stages.autoMerge,
-                        })
-                      }
-                    />
-                  }
-                  label="Pull request + CI on GitHub (off: merge locally into the base branch)"
+                <StageRow
+                  step={3}
+                  title="Pull request + CI"
+                  description="Push and open a GitHub PR, waiting on its CI. Off: merge locally into the base branch."
+                  checked={draft.stages.pr}
+                  onChange={(on) => setStages({ pr: on, autoMerge: on && draft.stages.autoMerge })}
                 />
-                <FormControlLabel
+                <StageRow
+                  step={4}
+                  title="Auto merge"
+                  description="Merge the PR by itself once CI is green. Off: you click Merge."
+                  checked={draft.stages.pr && draft.stages.autoMerge}
                   disabled={!draft.stages.pr}
-                  control={
-                    <Switch
-                      checked={draft.stages.pr && draft.stages.autoMerge}
-                      onChange={(e) => setStages({ autoMerge: e.target.checked })}
-                    />
-                  }
-                  label="Merge automatically once CI is green"
+                  onChange={(on) => setStages({ autoMerge: on })}
                 />
               </Stack>
-            </Box>
-          </Stack>
+            </Section>
+          </>
         ) : list === null ? (
           <Typography variant="body2" color="text.secondary">
             Loading…
           </Typography>
         ) : list.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No workspaces yet. Add the repos your cards should work on.
-          </Typography>
+          <Stack spacing={1.5} sx={{ alignItems: 'center', py: 5, textAlign: 'center' }}>
+            <IconsaxIcon icon={Folder2} size={36} variant="Bulk" />
+            <Typography variant="h6">No workspaces yet</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 380 }}>
+              Add the repos your cards should work on. Each gets a colour on the board and its own
+              stages.
+            </Typography>
+          </Stack>
         ) : (
-          <Stack spacing={1}>
+          <Stack spacing={1.5}>
             {list.map((w) => (
               <Stack
                 key={w.id}
                 direction="row"
-                spacing={1.5}
+                spacing={2}
                 sx={{
                   alignItems: 'center',
-                  p: 1.5,
+                  p: 2,
                   border: 1,
                   borderColor: 'divider',
-                  borderLeft: `4px solid ${w.color}`,
-                  borderRadius: 1,
+                  borderLeft: `5px solid ${w.color}`,
+                  borderRadius: 1.5,
                 }}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.25 }}>
                     <Typography variant="subtitle1">{w.name}</Typography>
                     {w.baseBranch ? (
                       <Chip size="small" variant="outlined" label={w.baseBranch} />
@@ -369,14 +491,36 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
                   <Typography variant="caption" color="text.secondary" noWrap component="div">
                     {w.path}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" component="div">
-                    {stageSummary(w.stages)}
-                  </Typography>
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ mt: 1, flexWrap: 'wrap', rowGap: 0.5 }}
+                  >
+                    {stageChips(w.stages).map((s, i) => (
+                      <Chip
+                        key={s}
+                        size="small"
+                        variant="light"
+                        color={i === 0 ? 'secondary' : 'primary'}
+                        label={s}
+                      />
+                    ))}
+                  </Stack>
                 </Box>
-                <Button size="small" color="secondary" onClick={() => setDraft(draftOf(w, 0))}>
+                <Button
+                  size="small"
+                  color="secondary"
+                  startIcon={<IconsaxIcon icon={Edit2} size={16} />}
+                  onClick={() => setDraft(draftOf(w, 0))}
+                >
                   Edit
                 </Button>
-                <Button size="small" color="error" onClick={() => void remove(w)}>
+                <Button
+                  size="small"
+                  color="error"
+                  startIcon={<IconsaxIcon icon={Trash} size={16} />}
+                  onClick={() => void remove(w)}
+                >
                   Remove
                 </Button>
               </Stack>

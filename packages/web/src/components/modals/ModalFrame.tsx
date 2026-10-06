@@ -31,6 +31,11 @@ export interface ModalFrameProps {
   /** Let the body fill the dialog and manage its own scrolling. */
   fillBody?: boolean;
   /**
+   * Body built from MUI only: no `.kb-app` legacy CSS (which restyles native
+   * inputs and breaks MUI fields) and the theme's padding.
+   */
+  muiBody?: boolean;
+  /**
    * Close on Escape. Turn off for modals that handle Escape themselves
    * (e.g. to cancel an inline edit first, or to stay open while saving).
    */
@@ -53,6 +58,7 @@ export function ModalFrame({
   footer,
   bodyClassName,
   fillBody = false,
+  muiBody = false,
   escapeCloses = true,
   ariaLabel,
   children,
@@ -99,8 +105,13 @@ export function ModalFrame({
         }}
       >
         <Box
-          className={['kb-app', bodyClassName].filter(Boolean).join(' ')}
-          sx={{ flex: 1, minHeight: 0, ...(fillBody && { display: 'flex', overflow: 'hidden' }) }}
+          className={[muiBody ? null : 'kb-app', bodyClassName].filter(Boolean).join(' ')}
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            ...(muiBody && { p: 3 }),
+            ...(fillBody && { display: 'flex', overflow: 'hidden' }),
+          }}
         >
           {children}
         </Box>
