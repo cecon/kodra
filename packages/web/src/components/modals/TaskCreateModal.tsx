@@ -200,7 +200,7 @@ export function TaskCreateModal({
   const [aiBusy, setAiBusy] = useState<AiMode | null>(null);
   const [aiError, setAiError] = useState<{ mode: AiMode; message: string } | null>(null);
   const [aiUndo, setAiUndo] = useState<{ mode: AiMode; value: string } | null>(null);
-  const { repos, focused, focusedRepoId } = useFocusedRepo();
+  const { repos, focused } = useFocusedRepo();
   const showRepoCaption = repos.length > 1 && focused !== null;
   const [templates, setTemplates] = useState<CardTemplatePayload[]>([]);
   const [templateId, setTemplateId] = useState<number | ''>('');
@@ -558,7 +558,6 @@ export function TaskCreateModal({
             ? { model: modelSelection.model, provider: modelSelection.provider }
             : { model }),
           ...(mode === 'spec' ? { appendSystemPrompt: SPEC_SYSTEM_PROMPT } : {}),
-          ...(focusedRepoId !== null ? { repoId: focusedRepoId } : {}),
         });
         // Cloud mode: onCreated above fired before the run row existed on
         // the server, so the card's latest_run was still null when the

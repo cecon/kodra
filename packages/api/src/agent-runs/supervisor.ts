@@ -1597,7 +1597,9 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
   }
 
   async function start(input: StartRunInput): Promise<AgentRun> {
-    if (opts.requireWorkspace && input.repoId === undefined) {
+    // On the global board the card's workspace is the only source of the
+    // repo: a stray repoId (the old global "focused repo") doesn't count.
+    if (opts.requireWorkspace) {
       const workspaceId = store.localIssues.findByNumber(input.issueNumber)?.workspaceId ?? null;
       if (!workspaceId || !opts.registry?.get(workspaceId)) {
         throw new Error(
