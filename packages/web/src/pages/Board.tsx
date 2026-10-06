@@ -508,7 +508,13 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     }
 
     const fromStatus = current.status;
-    const nextLabels = withStatus(current.labels, targetStatus);
+    // Leaving the queue drops its "queued" agent state.
+    const nextLabels = withStatus(
+      current.agent === 'queued' && targetStatus !== 'inProgress'
+        ? current.labels.map((l) => (l === 'agent:queued' ? 'agent:idle' : l))
+        : current.labels,
+      targetStatus,
+    );
     const before = list;
 
     mutate((prev) =>

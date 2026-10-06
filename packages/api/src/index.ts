@@ -209,6 +209,7 @@ export type {
   PreviewStatePayload,
   PullRequestPayload,
   ReviewGatePayload,
+  AgentSettingsPayload,
   WorkspaceProfilePayload,
   WorkspaceStages,
   ReviewGateState,

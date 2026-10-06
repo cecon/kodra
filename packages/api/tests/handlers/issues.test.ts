@@ -78,7 +78,7 @@ describe('issues:dispatch', () => {
       number: 7,
       fromStatus: 'todo',
     });
-    expect(result.run.status).toBe('running');
+    expect(result.run?.status).toBe('running');
     expect(supervisor.calls.some((c) => c.type === 'start')).toBe(true);
   });
 

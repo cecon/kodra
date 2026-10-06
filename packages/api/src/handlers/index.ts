@@ -4,6 +4,7 @@ import * as agentChecks from './agent-checks.js';
 import * as reviewGate from './review-gate.js';
 import * as pr from './pr.js';
 import * as workspaceProfiles from './workspace-profiles.js';
+import { drainQueue } from '../agent-queue.js';
 import * as agentCli from './agent-cli.js';
 import * as agentEvents from './agent-events.js';
 import * as agentPreview from './agent-preview.js';
@@ -112,6 +113,9 @@ export function createHandlers(opts: CreateHandlersOptions): Handlers {
     'workspace-profiles:list': async () => workspaceProfiles.list(deps),
     'workspace-profiles:save': async (args) => workspaceProfiles.save(deps, args),
     'workspace-profiles:remove': async (args) => workspaceProfiles.remove(deps, args),
+    'agent-settings:get': async () => workspaceProfiles.settings(deps),
+    'agent-settings:save': async (args) => workspaceProfiles.saveSettings(deps, args),
+    'agent-queue:drain': async () => ({ started: await drainQueue(deps) }),
     'cards:approve': (args) => pr.approve(deps, args),
     'pr:open': (args) => pr.open(deps, args),
     'pr:merge': (args) => pr.merge(deps, args),

@@ -198,7 +198,22 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
   }
   useEffect(() => {
     void reload().catch((err: unknown) => setError(String(err)));
+    void api
+      .getAgentSettings()
+      .then((s) => setMaxAgents(s.maxAgents))
+      .catch(() => undefined);
   }, []);
+
+  // How many agents run at once; beyond it, cards queue by priority.
+  const [maxAgents, setMaxAgents] = useState<number | null>(null);
+  async function changeMaxAgents(n: number): Promise<void> {
+    setError(null);
+    try {
+      setMaxAgents((await api.saveAgentSettings({ maxAgents: n })).maxAgents);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function save(): Promise<void> {
     if (!draft) return;
@@ -256,7 +271,32 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
       width={760}
       muiBody
       footerHint={
-        editing ? undefined : 'A workspace is a repo cards can act on; its colour marks its cards.'
+        editing ? undefined : (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Agents at once
+            </Typography>
+            <TextField
+              select
+              size="small"
+              value={maxAgents ?? ''}
+              disabled={maxAgents === null}
+              onChange={(e) => void changeMaxAgents(Number(e.target.value))}
+              SelectProps={{ native: true }}
+              inputProps={{ 'aria-label': 'Agents at once' }}
+              sx={{ width: 76 }}
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </TextField>
+            <Typography variant="caption" color="text.secondary">
+              more cards wait in In progress, P0 first
+            </Typography>
+          </Stack>
+        )
       }
       actions={
         editing ? (

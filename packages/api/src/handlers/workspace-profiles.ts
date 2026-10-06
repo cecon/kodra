@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { WorkspaceProfilePayload } from '../bridge.js';
+import type { AgentSettingsPayload, WorkspaceProfilePayload } from '../bridge.js';
 import { WorkspaceRegistryError, type WorkspaceRegistry } from '../workspace-registry.js';
 import { badRequest, parseArgs } from './errors.js';
 import type { HandlerDeps } from './types.js';
@@ -60,6 +60,25 @@ export function save(deps: HandlerDeps, args: unknown): WorkspaceProfilePayload 
       ...(parsed.stages !== undefined ? { stages: stripUndefined(parsed.stages) } : {}),
       ...(parsed.scripts !== undefined ? { scripts: stripUndefined(parsed.scripts) } : {}),
     });
+  } catch (err) {
+    if (err instanceof WorkspaceRegistryError) throw badRequest(err.message);
+    throw err;
+  }
+}
+
+const settingsSchema = z
+  .object({ maxAgents: z.number().int().min(1).max(20) })
+  .partial()
+  .strict();
+
+export function settings(deps: HandlerDeps): AgentSettingsPayload {
+  return registryOf(deps).settings();
+}
+
+export function saveSettings(deps: HandlerDeps, args: unknown): AgentSettingsPayload {
+  const parsed = parseArgs(settingsSchema, args);
+  try {
+    return registryOf(deps).saveSettings(stripUndefined(parsed));
   } catch (err) {
     if (err instanceof WorkspaceRegistryError) throw badRequest(err.message);
     throw err;

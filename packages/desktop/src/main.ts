@@ -881,7 +881,11 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
       const curatorTask = curator(run).catch(() => {
         // curator failures must not crash the supervisor hook
       });
-      await Promise.allSettled([labelTask, curatorTask]);
+      // A slot freed up: start the highest-priority queued card.
+      const queueTask = handlers['agent-queue:drain']().catch(() => {
+        // the periodic pass retries
+      });
+      await Promise.allSettled([labelTask, curatorTask, queueTask]);
     },
   });
   const supervisor = wrapNotifyingSupervisor(rawSupervisor);
@@ -1115,7 +1119,9 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
   const prWatchTick = async (): Promise<void> => {
     try {
       const { changed } = await handlers['pr:refresh-all']();
-      if (changed) broadcastIssueChange();
+      // Slots also free up when runs fail or are stopped.
+      const { started } = await handlers['agent-queue:drain']();
+      if (changed || started > 0) broadcastIssueChange();
     } catch {
       // gh missing or offline: try again next minute
     }

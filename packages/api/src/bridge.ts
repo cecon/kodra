@@ -486,8 +486,17 @@ export interface PostMessageResult {
 }
 
 export interface DispatchResult {
-  run: AgentRun;
+  /** Null when the card was queued: the agent limit was reached. */
+  run: AgentRun | null;
   message: Message;
+  /** Waiting in In progress for a free agent slot (by priority). */
+  queued?: boolean;
+}
+
+/** App-wide agent settings. */
+export interface AgentSettingsPayload {
+  /** How many agents may run at once; more cards wait in a priority queue. */
+  maxAgents: number;
 }
 
 export interface SplitResult {
@@ -1061,6 +1070,9 @@ export interface BridgeChannels {
     };
     result: WorkspaceProfilePayload;
   };
+  'agent-settings:get': { args: void; result: AgentSettingsPayload };
+  'agent-settings:save': { args: Partial<AgentSettingsPayload>; result: AgentSettingsPayload };
+  'agent-queue:drain': { args: void; result: { started: number } };
   'workspace-profiles:remove': { args: { id: string }; result: { removed: boolean } };
   'cards:approve': {
     args: { number: IssueRef };

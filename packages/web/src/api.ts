@@ -91,8 +91,10 @@ export interface PostMessageOptions {
 }
 
 export interface DispatchIssueResult {
-  run: AgentRun;
+  /** Null when the card was queued behind the agent limit. */
+  run: AgentRun | null;
   message: Message;
+  queued?: boolean;
 }
 
 export interface DispatchIssueInput {
@@ -798,6 +800,9 @@ export const api = {
   saveWorkspaceProfile: (input: ChannelArgs<'workspace-profiles:save'>) =>
     invoke('workspace-profiles:save', input),
   removeWorkspaceProfile: (id: string) => invoke('workspace-profiles:remove', { id }),
+  /** How many agents may run at once (more cards queue by priority). */
+  getAgentSettings: () => invoke('agent-settings:get', undefined),
+  saveAgentSettings: (patch: { maxAgents?: number }) => invoke('agent-settings:save', patch),
   /** Approve a reviewed card: open its PR, or merge locally when its
    *  workspace doesn't use PRs. */
   approveCard: (issueNumber: IssueRef) => invoke('cards:approve', { number: issueNumber }),

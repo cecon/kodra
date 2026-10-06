@@ -22,6 +22,7 @@ import type {
 import { bootstrapWorkspace } from '../workspace-bootstrap.js';
 import { sweepAllRunsForThread } from './agent-runs.js';
 import { gateForIssue } from './review-gate.js';
+import { liveRunCount, maxAgents } from '../agent-queue.js';
 import { knownPullRequest } from '../pr-flow.js';
 import { assertNoUncommittedWork } from '../worktree-guard.js';
 import { GitHubClient } from '@kanbots/core';
@@ -508,6 +509,20 @@ export async function dispatch(deps: HandlerDeps, args: DispatchArgs): Promise<D
     throw alreadyActive(`agent run #${active.id} is already ${active.status}`, active);
   }
 
+  // Over the agent limit: the card waits in In progress, queued by priority.
+  const limit = maxAgents(deps);
+  if (liveRunCount(deps) >= limit) {
+    const labels = issue.labels.filter((l) => !l.startsWith('status:') && !l.startsWith('agent:'));
+    labels.push('status:in-progress', 'agent:queued');
+    await deps.source.updateIssue(parsed.number, { labels });
+    const queuedMessage = deps.store.messages.create({
+      threadId: thread.id,
+      role: 'system',
+      body: `Queued: ${limit} agent${limit === 1 ? '' : 's'} already running. It starts by priority as soon as a slot frees up.`,
+    });
+    return { run: null, message: queuedMessage, queued: true };
+  }
+
   const priorRuns = deps.store.agentRuns.listByThread(thread.id);
   const kickoff = buildDispatchKickoff(
     { number: issue.number, title: issue.title, body: issue.body ?? '' },
@@ -537,6 +552,12 @@ ${SPEC_SYSTEM_PROMPT}`
     ...(parsed.provider !== undefined ? { provider: parsed.provider } : {}),
     ...(parsed.repoId !== undefined ? { repoId: parsed.repoId } : {}),
   });
+  if (issue.labels.includes('agent:queued')) {
+    // Started from the queue: no longer waiting.
+    await deps.source.updateIssue(parsed.number, {
+      labels: issue.labels.map((l) => (l === 'agent:queued' ? 'agent:running' : l)),
+    });
+  }
   return { run, message };
 }
 
@@ -742,15 +763,56 @@ export function buildTaskSystemPrompt(issue: {
   number: IssueRef;
   title: string;
   body?: string | null;
+  labels?: readonly string[];
 }): string {
   const body = issue.body && issue.body.trim().length > 0 ? issue.body : '(no description)';
+  const guidance = typeGuidance(issue.labels ?? []);
   return `TASK_CONTEXT — this conversation is scoped to a single task in the kodra project. Use it for every turn.
 
 Task #${issue.number}: ${issue.title}
 
 ${body}
 
-When the user says "this task", "this issue", "the ticket", "this ticket", or refers to "the task" without naming another, they always mean Task #${issue.number} above. Do not ask the user which task — proceed on Task #${issue.number}.`;
+When the user says "this task", "this issue", "the ticket", "this ticket", or refers to "the task" without naming another, they always mean Task #${issue.number} above. Do not ask the user which task — proceed on Task #${issue.number}.${
+    guidance
+      ? `
+
+${guidance}`
+      : ''
+  }`;
+}
+
+/** Conventional-commit prefix for a card's type label. */
+export function commitTypeOf(labels: readonly string[]): string | null {
+  const type = labels.find((l) => l.startsWith('type:'))?.slice('type:'.length);
+  switch (type) {
+    case 'feat':
+    case 'fix':
+    case 'chore':
+    case 'docs':
+      return type;
+    case 'infra':
+      return 'ci';
+    default:
+      return null;
+  }
+}
+
+const TYPE_GUIDANCE: Record<string, string> = {
+  feat: 'This is a feature: implement it and add or update tests that cover the new behaviour.',
+  fix: 'This is a bug fix: first reproduce it with a test that fails because of the bug, then make the smallest change that fixes it and keep that test as a regression test.',
+  chore:
+    'This is maintenance: do not change behaviour; the existing tests must keep passing unchanged.',
+  ci: 'This is a build/CI/tooling change: leave product code alone unless the change requires it, and check that the scripts or pipeline you touched still run.',
+  docs: 'This is documentation only: change docs, not code.',
+};
+
+/** How the card's type shapes the work, and the commit convention. */
+function typeGuidance(labels: readonly string[]): string | null {
+  const type = commitTypeOf(labels);
+  if (!type) return null;
+  return `TASK_TYPE — ${TYPE_GUIDANCE[type]}
+Write commit messages as conventional commits: "${type}: <what changed>".`;
 }
 
 interface DecisionOption {

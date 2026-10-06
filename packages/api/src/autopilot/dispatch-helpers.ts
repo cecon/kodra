@@ -45,6 +45,7 @@ export async function dispatchAutopilotChild(
       number: args.issue.number,
       title: args.issue.title,
       body: args.issue.body,
+      labels: args.issue.labels,
     }),
     issueBodyChars,
   };

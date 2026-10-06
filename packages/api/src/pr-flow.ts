@@ -7,7 +7,7 @@ import type { AgentRun } from '@kanbots/local-store';
 import type { PullRequestPayload } from './bridge.js';
 import { repoPathOfRun, sweepAllRunsForThread } from './handlers/agent-runs.js';
 import { badRequest } from './handlers/errors.js';
-import { postMessage } from './handlers/issues.js';
+import { commitTypeOf, postMessage } from './handlers/issues.js';
 import type { HandlerDeps } from './handlers/types.js';
 import { assertNoUncommittedWork } from './worktree-guard.js';
 
@@ -243,7 +243,7 @@ export async function openPullRequest(
         branch,
         ...(base ? ['--base', base] : []),
         '--title',
-        issue.title,
+        prTitle(issue.title, issue.labels),
         '--body',
         `${issue.body?.trim() || issue.title}\n\n---\nTask #${String(number)}, implemented by a Kodra agent and approved in review.`,
       ],
@@ -259,6 +259,14 @@ export async function openPullRequest(
 
 function autoMergeEnabled(deps: HandlerDeps, workspaceId: string | null): boolean {
   return workspaceId ? (deps.registry?.get(workspaceId)?.stages.autoMerge ?? false) : false;
+}
+
+/** "feat: Add X" — the card's type as a conventional-commit prefix. */
+export function prTitle(title: string, labels: readonly string[]): string {
+  const type = commitTypeOf(labels);
+  // Already prefixed ("fix: …", "feat(ui): …", "feat!: …")? Leave it.
+  const prefixed = new RegExp(`^${type ?? ''}(\\(.+\\))?!?:`, 'i');
+  return type && !prefixed.test(title) ? `${type}: ${title}` : title;
 }
 
 /** You merge once CI passed; the card then goes to Done. */

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type {
+  AgentSettingsPayload,
   WorkspaceProfilePayload,
   WorkspaceScriptsPayload,
   WorkspaceStages,
@@ -51,7 +52,10 @@ export interface SaveWorkspaceInput {
 interface RegistryFile {
   version: 1;
   workspaces: WorkspaceProfilePayload[];
+  settings?: Partial<AgentSettingsPayload>;
 }
+
+export const DEFAULT_AGENT_SETTINGS: AgentSettingsPayload = { maxAgents: 3 };
 
 /** Trimmed, non-empty scripts only; undefined when none is set. */
 function cleanScripts(
@@ -85,7 +89,11 @@ export class WorkspaceRegistry {
     if (!existsSync(this.file)) return { version: 1, workspaces: [] };
     try {
       const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<RegistryFile>;
-      return { version: 1, workspaces: Array.isArray(parsed.workspaces) ? parsed.workspaces : [] };
+      return {
+        version: 1,
+        workspaces: Array.isArray(parsed.workspaces) ? parsed.workspaces : [],
+        ...(parsed.settings ? { settings: parsed.settings } : {}),
+      };
     } catch {
       return { version: 1, workspaces: [] };
     }
@@ -143,6 +151,20 @@ export class WorkspaceRegistry {
       : [...data.workspaces, profile];
     this.write(data);
     return profile;
+  }
+
+  settings(): AgentSettingsPayload {
+    return { ...DEFAULT_AGENT_SETTINGS, ...this.read().settings };
+  }
+
+  saveSettings(patch: Partial<AgentSettingsPayload>): AgentSettingsPayload {
+    const data = this.read();
+    const next = { ...DEFAULT_AGENT_SETTINGS, ...data.settings, ...patch };
+    if (!Number.isInteger(next.maxAgents) || next.maxAgents < 1 || next.maxAgents > 20) {
+      throw new WorkspaceRegistryError('Agents at once must be a whole number from 1 to 20');
+    }
+    this.write({ ...data, settings: next });
+    return next;
   }
 
   remove(id: string): boolean {
