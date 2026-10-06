@@ -3,6 +3,7 @@ import * as agentActions from './agent-actions.js';
 import * as agentChecks from './agent-checks.js';
 import * as reviewGate from './review-gate.js';
 import * as pr from './pr.js';
+import * as workspaceProfiles from './workspace-profiles.js';
 import * as agentCli from './agent-cli.js';
 import * as agentEvents from './agent-events.js';
 import * as agentPreview from './agent-preview.js';
@@ -108,6 +109,9 @@ export function createHandlers(opts: CreateHandlersOptions): Handlers {
     'agent-runs:checks:list': (args) => agentChecks.list(deps, args),
     'agent-runs:checks:run': (args) => agentChecks.runChecks(deps, args),
     'agent-runs:checks:commands': () => agentChecks.commands(deps),
+    'workspace-profiles:list': async () => workspaceProfiles.list(deps),
+    'workspace-profiles:save': async (args) => workspaceProfiles.save(deps, args),
+    'workspace-profiles:remove': async (args) => workspaceProfiles.remove(deps, args),
     'pr:open': (args) => pr.open(deps, args),
     'pr:merge': (args) => pr.merge(deps, args),
     'pr:refresh-all': () => pr.refreshAll(deps),

@@ -61,6 +61,7 @@ const issueCreateSchema = z
     body: z.string().max(65_536).optional(),
     labels: z.array(z.string()).optional(),
     assignees: z.array(z.string()).optional(),
+    workspaceId: z.string().min(1).nullable().optional(),
   })
   .strict();
 
@@ -74,6 +75,7 @@ const issuePatchSchema = z
         state: z.enum(['open', 'closed']).optional(),
         labels: z.array(z.string()).optional(),
         assignees: z.array(z.string()).optional(),
+        workspaceId: z.string().min(1).nullable().optional(),
       })
       .strict(),
   })
@@ -232,6 +234,9 @@ function withReviewGate(deps: HandlerDeps, issue: DecoratedIssue): DecoratedIssu
   if (issue.status === 'review' && issue.activeRun === null) {
     issue.reviewGate = gateForIssue(deps, issue.number);
   }
+  // The workspace (repo) the card acts on, for its colour and name.
+  const profile = issue.workspaceId ? deps.registry?.get(issue.workspaceId) : null;
+  issue.workspace = profile ? { id: profile.id, name: profile.name, color: profile.color } : null;
   // PR column cards show their PR and its CI, as last seen by the watcher.
   if (issue.status === 'pr') issue.pullRequest = knownPullRequest(deps, issue.number);
   return issue;
@@ -296,6 +301,7 @@ export async function create(deps: HandlerDeps, args: CreateIssueArgs): Promise<
     ...(parsed.body !== undefined ? { body: parsed.body } : {}),
     ...(parsed.labels !== undefined ? { labels: parsed.labels } : {}),
     ...(parsed.assignees !== undefined ? { assignees: parsed.assignees } : {}),
+    ...(parsed.workspaceId !== undefined ? { workspaceId: parsed.workspaceId } : {}),
   };
   if (
     parsed.number !== undefined &&
@@ -322,6 +328,7 @@ export async function patch(deps: HandlerDeps, args: PatchIssueArgs): Promise<De
     ...(parsed.patch.state !== undefined ? { state: parsed.patch.state } : {}),
     ...(parsed.patch.labels !== undefined ? { labels: parsed.patch.labels } : {}),
     ...(parsed.patch.assignees !== undefined ? { assignees: parsed.patch.assignees } : {}),
+    ...(parsed.patch.workspaceId !== undefined ? { workspaceId: parsed.patch.workspaceId } : {}),
   };
   // Done removes the card's worktrees (below): never with work still
   // uncommitted in them.

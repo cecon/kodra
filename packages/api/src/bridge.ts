@@ -377,6 +377,34 @@ export interface DecoratedIssue extends Issue {
   reviewGate?: ReviewGatePayload | null;
   /** The card's pull request while it sits in the PR column. */
   pullRequest?: PullRequestPayload | null;
+  /** The registered workspace the card acts on, for its colour and name. */
+  workspace?: { id: string; name: string; color: string } | null;
+}
+
+/** Stages a workspace's cards go through after the agent works. */
+export interface WorkspaceStages {
+  /** Pre-review checks: commit, dependencies, then `checkKinds`. */
+  checks: boolean;
+  checkKinds: Array<'lint' | 'typecheck' | 'tests'>;
+  /** A human approves before the work moves on. */
+  review: boolean;
+  /** Push and open a GitHub PR, waiting on CI; off merges locally. */
+  pr: boolean;
+  /** Merge without a click once everything before it is green. */
+  autoMerge: boolean;
+}
+
+/** A registered workspace: a repo cards can act on. */
+export interface WorkspaceProfilePayload {
+  id: string;
+  name: string;
+  path: string;
+  /** Card colour on the board (side stripe and chip). */
+  color: string;
+  /** Branch work is based on and merged into; null = repo default. */
+  baseBranch: string | null;
+  stages: WorkspaceStages;
+  createdAt: string;
 }
 
 /** A card's pull request as last seen on GitHub. */
@@ -993,6 +1021,19 @@ export interface BridgeChannels {
     args: { runId: number; kinds?: CheckKind[] };
     result: AgentCheck[];
   };
+  'workspace-profiles:list': { args: void; result: WorkspaceProfilePayload[] };
+  'workspace-profiles:save': {
+    args: {
+      id?: string;
+      name: string;
+      path: string;
+      color?: string;
+      baseBranch?: string | null;
+      stages?: Partial<WorkspaceStages>;
+    };
+    result: WorkspaceProfilePayload;
+  };
+  'workspace-profiles:remove': { args: { id: string }; result: { removed: boolean } };
   'pr:open': { args: { number: IssueRef }; result: PullRequestPayload };
   'pr:merge': { args: { number: IssueRef }; result: PullRequestPayload };
   'pr:refresh-all': { args: void; result: { changed: boolean } };

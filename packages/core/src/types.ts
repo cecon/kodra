@@ -19,6 +19,8 @@ export interface Issue {
   closedAt: string | null;
   htmlUrl: string;
   isPullRequest: boolean;
+  /** Registered workspace (repo) the card acts on; local issues only. */
+  workspaceId?: string | null;
 }
 
 export interface Comment {
@@ -85,6 +87,7 @@ export interface CreateIssueInput {
   body?: string;
   labels?: string[];
   assignees?: string[];
+  workspaceId?: string | null;
 }
 
 export interface UpdateIssuePatch {
@@ -93,6 +96,7 @@ export interface UpdateIssuePatch {
   state?: IssueState;
   labels?: string[];
   assignees?: string[];
+  workspaceId?: string | null;
 }
 
 export interface OpenPRInput {

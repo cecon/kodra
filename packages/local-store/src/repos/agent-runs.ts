@@ -16,6 +16,8 @@ interface AgentRunRow {
   worktree_path: string | null;
   branch_name: string | null;
   base_branch: string | null;
+  workspace_id: string | null;
+  repo_path: string | null;
   pid: number | null;
   status: string;
   started_at: string;
@@ -52,6 +54,8 @@ function rowToAgentRun(row: AgentRunRow): AgentRun {
     worktreePath: row.worktree_path,
     branchName: row.branch_name,
     baseBranch: row.base_branch,
+    workspaceId: row.workspace_id ?? null,
+    repoPath: row.repo_path ?? null,
     pid: row.pid,
     status: row.status as AgentRunStatus,
     startedAt: row.started_at,
@@ -93,6 +97,8 @@ export interface UpdateAgentRunPatch {
   worktreePath?: string | null;
   branchName?: string | null;
   baseBranch?: string | null;
+  workspaceId?: string | null;
+  repoPath?: string | null;
   pid?: number | null;
   endedAt?: string | null;
   tokenUsageInput?: number | null;
@@ -121,6 +127,8 @@ const PATCH_COLUMNS: Record<keyof UpdateAgentRunPatch, string> = {
   worktreePath: 'worktree_path',
   branchName: 'branch_name',
   baseBranch: 'base_branch',
+  workspaceId: 'workspace_id',
+  repoPath: 'repo_path',
   pid: 'pid',
   endedAt: 'ended_at',
   tokenUsageInput: 'token_usage_input',
@@ -171,6 +179,8 @@ export class AgentRunsRepo {
       worktreePath,
       branchName,
       baseBranch,
+      workspaceId: null,
+      repoPath: null,
       pid: null,
       status,
       startedAt,

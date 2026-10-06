@@ -151,6 +151,10 @@ export interface AgentRun {
   worktreePath: string | null;
   branchName: string | null;
   baseBranch: string | null;
+  /** Registered workspace the run acted for, and the repo it worked in;
+   *  null on runs from before cards carried a workspace. */
+  workspaceId: string | null;
+  repoPath: string | null;
   pid: number | null;
   status: AgentRunStatus;
   startedAt: string;

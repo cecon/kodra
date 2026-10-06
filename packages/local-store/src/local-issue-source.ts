@@ -46,6 +46,7 @@ export class LocalIssueSource implements IssueSource {
       ...(input.assignees !== undefined ? { assignees: input.assignees } : {}),
       authorLogin: this.authorLogin,
       ...(this.folderId !== undefined ? { folderId: this.folderId } : {}),
+      ...(input.workspaceId !== undefined ? { workspaceId: input.workspaceId } : {}),
     });
   }
 

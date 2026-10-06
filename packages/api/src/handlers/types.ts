@@ -6,6 +6,7 @@ import type { MemoryProvider } from '../memory/provider.js';
 import type { AgentSupervisor } from '../agent-runs/supervisor.js';
 import type { AutopilotManager } from '../autopilot/orchestrator.js';
 import type { ToolCaller } from '../tool-policy.js';
+import type { WorkspaceRegistry } from '../workspace-registry.js';
 import type {
   AssistFieldFn,
   Config,
@@ -106,6 +107,8 @@ export interface HandlerDeps {
    * the renderer can fall back to a manual title/body.
    */
   draftPrDescription?: DraftPrDescriptionFn;
+  /** App-level registry of workspaces (repos cards act on). */
+  registry?: WorkspaceRegistry;
   /** Optional. Backs `composer:assist`, the per-field AI help in the
    *  new-task form; without it the channel returns a BadRequest. */
   assistField?: AssistFieldFn;

@@ -27,6 +27,12 @@ export { startToolBridge, type ToolBridge, type ToolDispatcher } from './tool-br
 export { dispatchChatTool } from './chat-tools-dispatch.js';
 export { assertToolAllowed, ToolPermissionError, type ToolCaller } from './tool-policy.js';
 export { issueRefSchema } from './issue-ref.js';
+export {
+  DEFAULT_STAGES,
+  WORKSPACE_COLORS,
+  WorkspaceRegistry,
+  type SaveWorkspaceInput,
+} from './workspace-registry.js';
 
 export {
   createAgentMemoryClient,
@@ -203,6 +209,8 @@ export type {
   PreviewStatePayload,
   PullRequestPayload,
   ReviewGatePayload,
+  WorkspaceProfilePayload,
+  WorkspaceStages,
   ReviewGateState,
   RecentActivityKind,
   RecentActivityPayload,

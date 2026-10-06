@@ -18,6 +18,7 @@ interface IssueRow {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  workspace_id: string | null;
 }
 
 interface CommentRow {
@@ -43,6 +44,7 @@ function rowToIssue(row: IssueRow): Issue {
     closedAt: row.closed_at,
     htmlUrl: '',
     isPullRequest: false,
+    workspaceId: row.workspace_id ?? null,
   };
 }
 
@@ -74,6 +76,7 @@ export interface CreateLocalIssueInput {
   assignees?: string[];
   authorLogin: string;
   folderId?: string;
+  workspaceId?: string | null;
 }
 
 export interface UpdateLocalIssuePatch {
@@ -82,6 +85,7 @@ export interface UpdateLocalIssuePatch {
   state?: IssueState;
   labels?: string[];
   assignees?: string[];
+  workspaceId?: string | null;
 }
 
 export interface CreateLocalCommentInput {
@@ -208,6 +212,11 @@ export class LocalIssuesRepo {
             args.folderId,
           );
       }
+      if (args.workspaceId) {
+        this.db
+          .prepare('UPDATE local_issues SET workspace_id = ? WHERE number = ?')
+          .run(args.workspaceId, bindIssueRef(issueNumber));
+      }
       const issue = this.findByNumber(issueNumber);
       if (!issue) throw new Error(`Failed to insert local issue ${issueNumber}`);
       return issue;
@@ -240,6 +249,10 @@ export class LocalIssuesRepo {
     if (patch.assignees !== undefined) {
       fields.push('assignees = ?');
       values.push(JSON.stringify(patch.assignees));
+    }
+    if (patch.workspaceId !== undefined) {
+      fields.push('workspace_id = ?');
+      values.push(patch.workspaceId);
     }
 
     fields.push('updated_at = ?');
