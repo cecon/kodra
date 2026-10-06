@@ -23,6 +23,8 @@ export type SuggesterProvider =
 
 export interface DraftIssueInput {
   description: string;
+  /** Repo to read while drafting (the card's workspace); default: the composer's cwd. */
+  cwd?: string;
 }
 
 export interface DraftedIssue {
@@ -64,6 +66,8 @@ export interface SuggestFeatureInput {
   model?: string;
   /** Free-form scope from the user — narrows the suggestion to a topic, area, or constraint. */
   userNotes?: string;
+  /** Repo to explore (a registered workspace); default: the suggester's cwd. */
+  cwd?: string;
   onEvent?: OnPlannerEvent;
 }
 
@@ -408,7 +412,7 @@ export function createComposer(opts: CreateComposerOptions): DraftIssueFn {
   return async function draftIssue(input: DraftIssueInput): Promise<DraftedIssue> {
     return runClaudeForDraftedIssue({
       command,
-      cwd,
+      cwd: input.cwd ?? cwd,
       timeoutMs,
       systemPrompt,
       stdin: input.description,
@@ -428,6 +432,8 @@ export interface AssistFieldInput {
   mode: FieldAssistMode;
   title: string;
   description: string;
+  /** Repo to read for context (the card's workspace). */
+  cwd?: string;
 }
 
 export type AssistFieldFn = (input: AssistFieldInput) => Promise<DraftedIssue>;
@@ -463,7 +469,7 @@ export function createFieldAssistant(opts: CreateComposerOptions): AssistFieldFn
     const description = input.description.trim() || '(empty)';
     return runClaudeForDraftedIssue({
       command,
-      cwd: opts.cwd,
+      cwd: input.cwd ?? opts.cwd,
       timeoutMs,
       systemPrompt: FIELD_ASSIST_PROMPTS[input.mode],
       stdin: `### Title\n${title}\n\n### Description\n${description}`,
@@ -531,6 +537,7 @@ export function createSuggester(opts: CreateSuggesterOptions): SuggestFeatureFn 
   const spawn = opts.spawn ?? nodeSpawn;
 
   return async function suggestFeature(input: SuggestFeatureInput): Promise<DraftedIssue> {
+    const runCwd = input.cwd ?? cwd;
     const systemPrompt =
       systemPromptOverride ?? buildSuggestSystemPrompt(input.personaPrompt, input.userNotes);
     const userPrompt = formatBacklogPrompt(input.backlog, input.userNotes);
@@ -538,7 +545,7 @@ export function createSuggester(opts: CreateSuggesterOptions): SuggestFeatureFn 
     if (provider === 'codex-cli') {
       const codexOpts: RunCodexOptions = {
         command: codexCommand,
-        cwd,
+        cwd: runCwd,
         timeoutMs,
         systemPrompt,
         userPrompt,
@@ -555,7 +562,7 @@ export function createSuggester(opts: CreateSuggesterOptions): SuggestFeatureFn 
       // (these CLIs have no --json-schema flag) and validated below.
       const adapterOpts: RunAdapterCliOptions = {
         provider,
-        cwd,
+        cwd: runCwd,
         timeoutMs,
         systemPrompt,
         userPrompt,
@@ -567,7 +574,7 @@ export function createSuggester(opts: CreateSuggesterOptions): SuggestFeatureFn 
     }
     const runOpts: RunClaudeOptions = {
       command: claudeCommand,
-      cwd,
+      cwd: runCwd,
       timeoutMs,
       systemPrompt,
       stdin: userPrompt,

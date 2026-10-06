@@ -534,6 +534,7 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     persona: Persona,
     provider?: ProviderId,
     userNotes?: string,
+    workspaceId?: string,
   ): Promise<void> {
     setPersonaPickerOpen(false);
     if (suggesting) return;
@@ -542,11 +543,12 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     setSuggesting(true);
     setMoveError(null);
     try {
-      const drafted = await api.suggestFeature(persona.prompt, provider, userNotes);
+      const drafted = await api.suggestFeature(persona.prompt, provider, userNotes, workspaceId);
       await api.createIssue({
         title: drafted.title,
         body: drafted.body,
         labels: ['status:backlog', 'type:feat'],
+        ...(workspaceId ? { workspaceId } : {}),
       });
       notifyBacklogCreated(['status:backlog', 'type:feat']);
       dispatchIssuesRefetch();
@@ -829,7 +831,9 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
       {personaPickerOpen ? (
         <PersonaPickerModal
           onClose={() => setPersonaPickerOpen(false)}
-          onPick={(persona, provider, notes) => void runSuggestionWith(persona, provider, notes)}
+          onPick={(persona, provider, notes, workspaceId) =>
+            void runSuggestionWith(persona, provider, notes, workspaceId)
+          }
         />
       ) : null}
       {autopilotLaunchOpen ? (

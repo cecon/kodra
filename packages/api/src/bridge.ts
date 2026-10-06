@@ -115,6 +115,8 @@ export interface Config {
 
 export interface DraftIssueInput {
   description: string;
+  /** Repo the AI reads for context (a registered workspace's path). */
+  cwd?: string;
 }
 
 export interface DraftedIssue {
@@ -131,6 +133,10 @@ export interface AssistFieldInput {
   mode: FieldAssistMode;
   title: string;
   description: string;
+  /** Channel arg: the card's workspace, whose repo the AI reads. */
+  workspaceId?: string;
+  /** Resolved repo path handed to the assistant. */
+  cwd?: string;
 }
 
 export type AssistFieldFn = (input: AssistFieldInput) => Promise<DraftedIssue>;
@@ -186,6 +192,8 @@ export interface SuggestFeatureInput {
   model?: string;
   /** Free-form scope from the user — narrows the suggestion to a topic, area, or constraint. */
   userNotes?: string;
+  /** Repo to explore (a registered workspace's path). */
+  cwd?: string;
   onEvent?: (event: PlannerEvent) => void;
 }
 
@@ -1247,10 +1255,16 @@ export interface BridgeChannels {
     result: WorkspaceFolderPayload;
   };
   'folders:remove': { args: { id: string }; result: { ok: boolean } };
-  'composer:draft': { args: { description: string }; result: DraftedIssue };
+  'composer:draft': { args: { description: string; workspaceId?: string }; result: DraftedIssue };
   'composer:assist': { args: AssistFieldInput; result: DraftedIssue };
   'composer:suggest': {
-    args: { personaPrompt: string; provider?: ProviderId; userNotes?: string };
+    args: {
+      personaPrompt: string;
+      provider?: ProviderId;
+      userNotes?: string;
+      /** Workspace whose repo the suggestion explores. */
+      workspaceId?: string;
+    };
     result: DraftedIssue;
   };
   'attachments:upload': {

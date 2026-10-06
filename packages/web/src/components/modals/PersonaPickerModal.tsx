@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
+import { useFetch } from '../../hooks/useFetch.js';
 import { createPersona, deletePersona, listPersonas, type Persona } from '../../personas.js';
 import type { ProviderId } from '../../types.js';
 import Button from '@mui/material/Button';
@@ -7,13 +8,23 @@ import { ModalFrame } from './ModalFrame.js';
 
 export interface PersonaPickerModalProps {
   onClose: () => void;
-  onPick: (persona: Persona, provider?: ProviderId, userNotes?: string) => void;
+  onPick: (
+    persona: Persona,
+    provider?: ProviderId,
+    userNotes?: string,
+    workspaceId?: string,
+  ) => void;
   /** If true, the user can pick multiple personas before confirming. */
   multiSelect?: boolean;
   /** Confirm button label override in multi-select mode. */
   multiSelectConfirmLabel?: string;
   /** Called with the selected personas when the user confirms in multi-select mode. */
-  onConfirm?: (personas: Persona[], provider?: ProviderId, userNotes?: string) => void;
+  onConfirm?: (
+    personas: Persona[],
+    provider?: ProviderId,
+    userNotes?: string,
+    workspaceId?: string,
+  ) => void;
   /** Headline shown next to the Kodra crumb. */
   title?: string;
   /** Subhead shown above the persona grid. */
@@ -70,6 +81,12 @@ export function PersonaPickerModal({
   const [configuredProviders, setConfiguredProviders] = useState<Set<ProviderId>>(() => new Set());
   const [provider, setProvider] = useState<ProviderId>('claude-code');
   const [userNotes, setUserNotes] = useState('');
+  // The repo the suggestion explores (and the new card acts on).
+  const { data: profiles } = useFetch('workspace-profiles', () => api.listWorkspaceProfiles());
+  const [workspaceId, setWorkspaceId] = useState('');
+  useEffect(() => {
+    if (!workspaceId && profiles && profiles.length > 0) setWorkspaceId(profiles[0]!.id);
+  }, [profiles, workspaceId]);
 
   const selectedPersonas = useMemo(
     () => personas.filter((p) => selectedIds.has(p.id)),
@@ -106,6 +123,7 @@ export function PersonaPickerModal({
   const noProvidersConfigured = configuredProviders.size === 0;
   const trimmedNotes = userNotes.trim();
   const notesArg = trimmedNotes.length > 0 ? trimmedNotes : undefined;
+  const workspaceArg = workspaceId || undefined;
 
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent): void {
@@ -158,13 +176,13 @@ export function PersonaPickerModal({
         return next;
       });
     } else {
-      onPick(created, provider, notesArg);
+      onPick(created, provider, notesArg, workspaceArg);
     }
   }
 
   function handleCardClick(persona: Persona): void {
     if (!multiSelect) {
-      onPick(persona, provider, notesArg);
+      onPick(persona, provider, notesArg, workspaceArg);
       return;
     }
     setSelectedIds((prev) => {
@@ -181,10 +199,10 @@ export function PersonaPickerModal({
   function handleConfirm(): void {
     if (!multiSelect || selectedPersonas.length === 0) return;
     if (onConfirm) {
-      onConfirm(selectedPersonas, provider, notesArg);
+      onConfirm(selectedPersonas, provider, notesArg, workspaceArg);
     } else {
       // Backwards-compat fallback: emit each pick individually.
-      for (const p of selectedPersonas) onPick(p, provider, notesArg);
+      for (const p of selectedPersonas) onPick(p, provider, notesArg, workspaceArg);
     }
   }
 
@@ -273,6 +291,26 @@ export function PersonaPickerModal({
             </span>
           ) : null}
         </div>
+
+        {profiles && profiles.length > 0 ? (
+          <div className="kb-field" style={{ marginBottom: 16 }}>
+            <label className="kb-field-label" htmlFor="kb-suggest-workspace">
+              Workspace — the repo to explore and the new card acts on
+            </label>
+            <select
+              id="kb-suggest-workspace"
+              className="kb-input"
+              value={workspaceId}
+              onChange={(e) => setWorkspaceId(e.target.value)}
+            >
+              {profiles.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         <div className="kb-field" style={{ marginBottom: 16 }}>
           <label className="kb-field-label" htmlFor="kb-suggest-notes">

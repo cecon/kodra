@@ -449,13 +449,16 @@ export const api = {
     mode: 'improve-description' | 'suggest-title';
     title: string;
     description: string;
+    workspaceId?: string;
   }): Promise<DraftedIssue> => invoke('composer:assist', input),
   suggestFeature: (
     personaPrompt: string,
     provider?: ProviderId,
     userNotes?: string,
+    workspaceId?: string,
   ): Promise<DraftedIssue> => {
     const args: ChannelArgs<'composer:suggest'> = { personaPrompt };
+    if (workspaceId !== undefined) args.workspaceId = workspaceId;
     if (provider !== undefined) args.provider = provider;
     const trimmedNotes = userNotes?.trim();
     if (trimmedNotes) args.userNotes = trimmedNotes;

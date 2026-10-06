@@ -347,7 +347,12 @@ export function TaskCreateModal({
     setAiBusy(mode);
     setAiError(null);
     try {
-      const result = await api.assistField({ mode, title, description: body });
+      const result = await api.assistField({
+        mode,
+        title,
+        description: body,
+        ...(workspaceId ? { workspaceId } : {}),
+      });
       if (mode === 'suggest-title') {
         setAiUndo({ mode, value: title });
         setTitle(result.title);
