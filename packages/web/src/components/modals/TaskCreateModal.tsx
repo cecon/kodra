@@ -32,6 +32,8 @@ import { AiAssistButton } from '../forms/AiAssistButton.js';
 
 type AiMode = 'improve-description' | 'suggest-title';
 
+const LAST_WORKSPACE_KEY = 'kodra.newTask.workspace';
+
 /** Line under a field after an AI assist: the error, or an undo link. */
 function AiNote({
   mode,
@@ -170,6 +172,29 @@ export function TaskCreateModal({
   const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<MarkdownEditorHandle | null>(null);
   const [pasting, setPasting] = useState(0);
+  // The registered workspace (repo) the card acts on; remembers the last pick.
+  const { data: profiles } = useFetch('workspace-profiles', () => api.listWorkspaceProfiles());
+  const [workspaceId, setWorkspaceId] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(LAST_WORKSPACE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (!profiles || profiles.length === 0) return;
+    if (!workspaceId || !profiles.some((w) => w.id === workspaceId)) {
+      setWorkspaceId(profiles[0]!.id);
+    }
+  }, [profiles, workspaceId]);
+  function pickWorkspace(id: string): void {
+    setWorkspaceId(id);
+    try {
+      window.localStorage.setItem(LAST_WORKSPACE_KEY, id);
+    } catch {
+      // remembered for this session only
+    }
+  }
   // Per-field AI help. `aiUndo` keeps the value the AI replaced so the user
   // can take it back.
   const [aiBusy, setAiBusy] = useState<AiMode | null>(null);
@@ -504,6 +529,7 @@ export function TaskCreateModal({
         labels,
         ...(trimmedCustomNumber ? { number: trimmedCustomNumber } : {}),
         ...(assignee === 'me' ? { assignees: ['you'] } : {}),
+        ...(workspaceId ? { workspaceId } : {}),
       });
       notifyBacklogCreated(labels);
       onCreated?.(created);
@@ -561,6 +587,7 @@ export function TaskCreateModal({
         labels,
         ...(trimmedCustomNumber ? { number: trimmedCustomNumber } : {}),
         ...(assignee === 'me' ? { assignees: ['you'] } : {}),
+        ...(workspaceId ? { workspaceId } : {}),
       });
       notifyBacklogCreated(labels);
       onCreated?.(created);
@@ -626,6 +653,44 @@ export function TaskCreateModal({
                   </select>
                 </div>
               ) : null}
+              {/* WORKSPACE: the repo the card acts on */}
+              <div className="kb-field">
+                <label className="kb-field-label">
+                  Workspace
+                  <span className="kb-field-hint">the repo the agent works in</span>
+                </label>
+                {profiles && profiles.length > 0 ? (
+                  <div className="kb-templates">
+                    {profiles.map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        className={`kb-tpl${workspaceId === w.id ? ' on' : ''}`}
+                        onClick={() => pickWorkspace(w.id)}
+                        title={w.path}
+                      >
+                        <span
+                          className="kb-ico"
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: w.color,
+                            display: 'inline-block',
+                          }}
+                        />
+                        {w.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                    No workspaces registered yet: the card works in the folder this board was opened
+                    on. Add repos in Configure → Workspaces.
+                  </div>
+                )}
+              </div>
+
               {/* TITLE */}
               <div className="kb-field">
                 <label className="kb-field-label" htmlFor="kb-task-title">

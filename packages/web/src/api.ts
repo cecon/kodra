@@ -790,6 +790,14 @@ export const api = {
     }
     return invoke('issues:archive', { number: issueNumber });
   },
+  /** App-level workspace registry: the repos cards act on, their colour and stages. */
+  listWorkspaceProfiles: () => invoke('workspace-profiles:list', undefined),
+  saveWorkspaceProfile: (input: ChannelArgs<'workspace-profiles:save'>) =>
+    invoke('workspace-profiles:save', input),
+  removeWorkspaceProfile: (id: string) => invoke('workspace-profiles:remove', { id }),
+  /** Approve a reviewed card: open its PR, or merge locally when its
+   *  workspace doesn't use PRs. */
+  approveCard: (issueNumber: IssueRef) => invoke('cards:approve', { number: issueNumber }),
   /** Approve a reviewed card: push its branch and open its PR (PR column). */
   openPullRequest: (issueNumber: IssueRef) => invoke('pr:open', { number: issueNumber }),
   /** Merge the card's PR once CI passed; the card goes to Done. */

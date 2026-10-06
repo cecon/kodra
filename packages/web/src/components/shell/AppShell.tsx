@@ -184,7 +184,7 @@ function DrawerNav({
         <NavAction title="Cloud" icon={Cloud} onClick={nav.onOpenCloud} />
         <NavAction title="House rules" icon={Book1} onClick={nav.onOpenRules} />
         <NavAction title="Repo scripts" icon={Code} onClick={nav.onOpenScripts} />
-        <NavAction title="Repos" icon={Hierarchy} onClick={nav.onOpenRepos} />
+        <NavAction title="Workspaces" icon={Hierarchy} onClick={nav.onOpenRepos} />
         <NavAction title="Card templates" icon={Copy} onClick={nav.onOpenCardTemplates} />
         <NavAction title="Memory" icon={Cpu} onClick={nav.onOpenMemory} />
         <NavAction title="Settings" icon={Setting2} onClick={nav.onOpenSettings} />

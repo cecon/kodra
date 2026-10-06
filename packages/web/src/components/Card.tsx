@@ -85,6 +85,9 @@ export function moveBlockedReason(issue: Issue, target: StatusKey | null): strin
   if (issue.status === 'pr') {
     return `#${issue.number} has an open PR: merge it once CI passes (⋯ → Merge PR). A CI failure sends it back to the agent by itself.`;
   }
+  if (target === 'pr' && issue.workspace && !issue.workspace.pr) {
+    return `${issue.workspace.name} doesn't use pull requests: approve #${issue.number} in Review to merge it locally.`;
+  }
   if (target === 'pr' && issue.status !== 'review') {
     return `Only a reviewed card goes to PR: approve #${issue.number} from Review.`;
   }
@@ -260,6 +263,20 @@ function CardBody({
         // Right padding leaves room for the card's "⋯" menu button.
         sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5, pr: 3 }}
       >
+        {issue.workspace ? (
+          <Tooltip title={`Workspace: ${issue.workspace.name}`}>
+            <Chip
+              size="small"
+              label={issue.workspace.name}
+              sx={{
+                ...chipSx,
+                bgcolor: alpha(issue.workspace.color, 0.16),
+                color: issue.workspace.color,
+                border: `1px solid ${alpha(issue.workspace.color, 0.5)}`,
+              }}
+            />
+          </Tooltip>
+        ) : null}
         {tag ? (
           <Chip label={tag} size="small" color={tagColor(tag)} variant="outlined" sx={chipSx} />
         ) : null}
@@ -421,6 +438,7 @@ function CardBody({
         <ReviewActions
           issueNumber={issue.number}
           isPullRequest={issue.isPullRequest}
+          usesPr={issue.workspace?.pr ?? true}
           {...(onReviewAction ? { onAction: onReviewAction } : {})}
         />
       ) : null}
@@ -560,10 +578,13 @@ function MergeAction({ issueNumber }: { issueNumber: IssueRef }) {
 function ReviewActions({
   issueNumber,
   isPullRequest,
+  usesPr,
   onAction,
 }: {
   issueNumber: IssueRef;
   isPullRequest: boolean;
+  /** Whether the card's workspace goes through a PR (else local merge). */
+  usesPr: boolean;
   onAction?: () => void;
 }) {
   const [shipOpen, setShipOpen] = useState(false);
@@ -575,7 +596,7 @@ function ReviewActions({
     setApproving(true);
     setApproveError(null);
     void api
-      .openPullRequest(issueNumber)
+      .approveCard(issueNumber)
       .then(() => {
         dispatchIssuesRefetch();
         onAction?.();
@@ -619,9 +640,21 @@ function ReviewActions({
   return (
     <Stack spacing={1} onClick={stopClick} onPointerDown={stopClick}>
       <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', rowGap: 0.75 }}>
-        <Tooltip title="Push the branch and open its pull request; the card moves to PR and waits on CI.">
+        <Tooltip
+          title={
+            usesPr
+              ? 'Push the branch and open its pull request; the card moves to PR and waits on CI.'
+              : 'Merge the branch into the base branch locally; the card moves to Done.'
+          }
+        >
           <Button size="small" variant="contained" disabled={approving} onClick={approve}>
-            {approving ? 'Opening PR…' : 'Approve → open PR'}
+            {approving
+              ? usesPr
+                ? 'Opening PR…'
+                : 'Merging…'
+              : usesPr
+                ? 'Approve → open PR'
+                : 'Approve → merge'}
           </Button>
         </Tooltip>
         <Button size="small" variant="outlined" color="secondary" onClick={requestChanges}>
@@ -1232,13 +1265,16 @@ function CardMenu({ issue }: { issue: Issue }) {
 /** Card surface: state accent on the left, rings for focus and multi-select. */
 function cardSx(issue: Issue, selected: boolean, multiSelected: boolean, dragging: boolean) {
   const accent = agentColor(issue.agent);
+  // The workspace colour marks which repo the card acts on; it takes the
+  // stripe (the agent state is in the chip).
+  const stripe = issue.workspace?.color ?? null;
   return (t: Theme) => ({
     position: 'relative' as const,
     display: 'block',
     width: '100%',
     textAlign: 'left' as const,
     p: 1.75,
-    pl: accent ? 2 : 1.75,
+    pl: accent || stripe ? 2 : 1.75,
     borderRadius: 1.5,
     border: '1px solid',
     borderColor: selected ? t.palette.primary.main : t.palette.divider,
@@ -1251,16 +1287,16 @@ function cardSx(issue: Issue, selected: boolean, multiSelected: boolean, draggin
     transition: t.transitions.create(['border-color', 'box-shadow']),
     '&:hover': { borderColor: selected ? t.palette.primary.main : t.palette.secondary.light },
     '&:focus-visible': { outline: `2px solid ${t.palette.primary.main}`, outlineOffset: 2 },
-    ...(accent && {
+    ...((stripe || accent) && {
       '&::before': {
         content: '""',
         position: 'absolute' as const,
         left: 0,
-        top: 10,
-        bottom: 10,
-        width: 3,
-        borderRadius: '0 3px 3px 0',
-        bgcolor: t.palette[accent].main,
+        top: stripe ? 0 : 10,
+        bottom: stripe ? 0 : 10,
+        width: stripe ? 5 : 3,
+        borderRadius: stripe ? '12px 0 0 12px' : '0 3px 3px 0',
+        bgcolor: stripe ?? t.palette[accent!].main,
       },
     }),
   });
@@ -1340,6 +1376,8 @@ export const Card = memo(CardImpl, (prev, next) => {
   ) {
     return false;
   }
+  if (a.workspace?.id !== b.workspace?.id || a.workspace?.color !== b.workspace?.color)
+    return false;
   const pa = a.pullRequest ?? null;
   const pb = b.pullRequest ?? null;
   if (pa?.number !== pb?.number || pa?.ci !== pb?.ci || pa?.state !== pb?.state) return false;

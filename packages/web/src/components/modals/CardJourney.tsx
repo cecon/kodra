@@ -278,9 +278,15 @@ function journeyOf(issue: Issue, onOpenTab: CardJourneyProps['onOpenTab']): Jour
       severity: 'success',
       next:
         (gate === null ? '' : 'all checks passed. ') +
-        'Review the changes in the Diff tab; if they are right, approve to push the branch and open its PR.',
+        (issue.workspace && !issue.workspace.pr
+          ? 'Review the changes in the Diff tab; if they are right, approve to merge them into the base branch.'
+          : 'Review the changes in the Diff tab; if they are right, approve to push the branch and open its PR.'),
       actions: [
-        { label: 'Approve → open PR', primary: true, run: () => api.openPullRequest(issue.number) },
+        {
+          label: issue.workspace && !issue.workspace.pr ? 'Approve → merge' : 'Approve → open PR',
+          primary: true,
+          run: () => api.approveCard(issue.number),
+        },
         { label: 'Open Diff', run: () => onOpenTab('diff') },
       ],
     };

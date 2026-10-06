@@ -30,7 +30,7 @@ import { RepoScriptsSettingsModal } from './components/modals/RepoScriptsSetting
 import { ProvidersSettingsModal } from './components/modals/ProvidersSettingsModal.js';
 import { SentrySettingsModal } from './components/modals/SentrySettingsModal.js';
 import { MemorySettingsModal } from './components/modals/MemorySettingsModal.js';
-import { WorkspaceReposSettingsModal } from './components/modals/WorkspaceReposSettingsModal.js';
+import { WorkspacesSettingsModal } from './components/modals/WorkspacesSettingsModal.js';
 import { Stats } from './components/Stats.js';
 import { Tray } from './components/tray/Tray.js';
 import { UpdaterToast } from './components/updater/UpdaterToast.js';
@@ -323,7 +323,7 @@ function ShellHost({
       {memorySettingsOpen ? (
         <MemorySettingsModal onClose={() => setMemorySettingsOpen(false)} />
       ) : null}
-      {reposOpen ? <WorkspaceReposSettingsModal onClose={() => setReposOpen(false)} /> : null}
+      {reposOpen ? <WorkspacesSettingsModal onClose={() => setReposOpen(false)} /> : null}
       {cardTemplatesOpen ? (
         <CardTemplatesSettingsModal onClose={() => setCardTemplatesOpen(false)} />
       ) : null}
