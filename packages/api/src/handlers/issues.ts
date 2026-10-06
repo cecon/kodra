@@ -246,6 +246,13 @@ function withReviewGate(deps: HandlerDeps, issue: DecoratedIssue): DecoratedIssu
         pr: profile.stages.pr,
       }
     : null;
+  // How many agent runs the card has had (its agents icon on the board).
+  const cardThread = deps.store.threads.findByIssue(
+    deps.config.owner,
+    deps.config.repo,
+    issue.number,
+  );
+  issue.runCount = cardThread ? deps.store.agentRuns.listByThread(cardThread.id).length : 0;
   // In progress with no agent because its last run failed: say so.
   if (issue.status === 'inProgress' && issue.activeRun === null && issue.agent !== 'queued') {
     const thread = deps.store.threads.findByIssue(

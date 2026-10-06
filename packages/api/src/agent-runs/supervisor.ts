@@ -525,7 +525,11 @@ export async function freeBranchName(repoPath: string, branch: string): Promise<
 export async function createSupervisor(opts: CreateSupervisorOptions): Promise<AgentSupervisor> {
   const { store } = opts;
   /** Keep what the agent is given, so the card can show its context. */
-  const recordAgentContext = (runId: number, prompt: string, systemPrompt: string | undefined): void => {
+  const recordAgentContext = (
+    runId: number,
+    prompt: string,
+    systemPrompt: string | undefined,
+  ): void => {
     try {
       store.agentRuns.update(runId, { lastPrompt: prompt, systemPrompt: systemPrompt ?? null });
     } catch {

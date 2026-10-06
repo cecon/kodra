@@ -12,7 +12,7 @@ import {
 describe('labels', () => {
   it('exposes all status labels', () => {
     const keys = Object.keys(STATUS_LABELS);
-    expect(keys).toEqual(['backlog', 'todo', 'inProgress', 'review', 'done']);
+    expect(keys).toEqual(['backlog', 'todo', 'inProgress', 'review', 'pr', 'done']);
   });
 
   it('exposes all agent labels', () => {
@@ -35,8 +35,8 @@ describe('labels', () => {
     expect(statusFromLabels(['status:done', 'status:todo'])).toBe('todo');
   });
 
-  it('ALL_KANBOTS_LABELS contains 11 entries', () => {
-    expect(ALL_KANBOTS_LABELS).toHaveLength(11);
+  it('ALL_KANBOTS_LABELS contains 12 entries', () => {
+    expect(ALL_KANBOTS_LABELS).toHaveLength(12);
   });
 
   it('all labels have valid 6-char hex colors', () => {

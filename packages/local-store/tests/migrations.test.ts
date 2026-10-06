@@ -87,6 +87,8 @@ describe('migrations', () => {
       '0032_issue_folders',
       '0033_issue_ref_text',
       '0034_agent_runs_base_branch',
+      '0035_card_workspace',
+      '0036_run_agent_context',
     ]);
     store.close();
   });

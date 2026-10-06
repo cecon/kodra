@@ -26,9 +26,9 @@ import type { AgentCheck, AgentRun, AgentRunStatus, Issue } from '../../types.js
  * the legacy `.kb-app` CSS, which restyles native inputs.
  */
 
-const LIVE: ReadonlySet<AgentRunStatus> = new Set(['starting', 'running', 'awaiting_input']);
+export const LIVE: ReadonlySet<AgentRunStatus> = new Set(['starting', 'running', 'awaiting_input']);
 
-const STATUS: Record<
+export const STATUS: Record<
   AgentRunStatus,
   { label: string; color: 'success' | 'warning' | 'error' | 'info' | 'secondary' }
 > = {
@@ -49,7 +49,7 @@ const CHECK_LABEL: Record<string, string> = {
   e2e: 'e2e',
 };
 
-function fmtElapsed(startIso: string, endIso: string | null): string {
+export function fmtElapsed(startIso: string, endIso: string | null): string {
   const start = new Date(startIso).getTime();
   if (Number.isNaN(start)) return '—';
   const sec = Math.max(
@@ -62,12 +62,12 @@ function fmtElapsed(startIso: string, endIso: string | null): string {
     : `${m}m ${String(sec % 60).padStart(2, '0')}s`;
 }
 
-function fmtTokens(n: number | null): string {
+export function fmtTokens(n: number | null): string {
   if (n === null) return '—';
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
-const mono = { fontFamily: 'var(--ff-mono, monospace)' };
+export const mono = { fontFamily: 'var(--ff-mono, monospace)' };
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -84,7 +84,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+export function Metric({ label, value }: { label: string; value: string }) {
   return (
     <Box sx={{ p: 1, borderRadius: 1, bgcolor: 'action.hover', minWidth: 0 }}>
       <Typography variant="caption" color="text.secondary" component="div">
@@ -108,7 +108,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ContextBlock({ title, text }: { title: string; text: string | null }) {
+export function ContextBlock({ title, text }: { title: string; text: string | null }) {
   return (
     <Accordion
       disableGutters

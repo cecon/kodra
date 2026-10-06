@@ -385,6 +385,8 @@ export interface DecoratedIssue extends Issue {
   reviewGate?: ReviewGatePayload | null;
   /** The card's pull request while it sits in the PR column. */
   pullRequest?: PullRequestPayload | null;
+  /** Agent runs the card has had. */
+  runCount?: number;
   /** The registered workspace the card acts on, for its colour and name. */
   workspace?: {
     id: string;

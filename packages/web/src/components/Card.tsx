@@ -14,6 +14,7 @@ import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Badge from '@mui/material/Badge';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -31,6 +32,7 @@ import { IconButton, IconsaxIcon } from '@kanbots/ui';
 import {
   Archive,
   ArrowRotateLeft,
+  Cpu,
   Hierarchy,
   MessageQuestion,
   More,
@@ -56,6 +58,7 @@ import {
 import type { ReviewGatePayload } from '@kanbots/api';
 import type { Issue, IssueActiveRun, ShipStatus, StatusKey } from '../types.js';
 import { agentColor, agentLabel, priorityColor, tagColor } from './board/boardStyle.js';
+import { AgentsModal } from './modals/AgentsModal.js';
 
 /** The card's run while an agent is still working on it (or waiting on
  *  the user), else null. Such a card can't change columns until the run
@@ -310,8 +313,13 @@ function CardBody({
       <Stack
         direction="row"
         spacing={0.75}
-        // Right padding leaves room for the card's "⋯" menu button.
-        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5, pr: 3 }}
+        // Right padding leaves room for the agents icon and the "⋯" menu.
+        sx={{
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          rowGap: 0.5,
+          pr: (issue.runCount ?? 0) > 0 ? 7 : 3,
+        }}
       >
         {issue.workspace ? (
           <Tooltip title={`Workspace: ${issue.workspace.name}`}>
@@ -1397,6 +1405,53 @@ function CardImpl({
     >
       <CardBody issue={issue} liveTool={liveTool} />
       <CardMenu issue={issue} />
+      {(issue.runCount ?? 0) > 0 ? <AgentsButton issue={issue} /> : null}
+    </Box>
+  );
+}
+
+/**
+ * The card's agents: an icon with how many runs it had, next to ⋯, that
+ * opens the agents modal (each run and its context). Swallows events like
+ * the menu so it never selects, opens or drags the card.
+ */
+function AgentsButton({ issue }: { issue: Issue }) {
+  const [open, setOpen] = useState(false);
+  const swallow = (e: SyntheticEvent) => e.stopPropagation();
+  const live = liveRunOf(issue) !== null;
+  return (
+    <Box
+      component="span"
+      onClick={swallow}
+      onDoubleClick={swallow}
+      onPointerDown={swallow}
+      onKeyDown={swallow}
+      sx={{ position: 'absolute', top: 6, right: 34 }}
+    >
+      <Tooltip title={`Agentes (${issue.runCount ?? 0})`}>
+        <IconButton
+          size="small"
+          color={live ? 'success' : 'secondary'}
+          aria-label="Ver agentes"
+          onClick={() => setOpen(true)}
+          sx={{ width: 26, height: 26 }}
+        >
+          <Badge
+            badgeContent={issue.runCount}
+            color={live ? 'success' : 'secondary'}
+            sx={{ '& .MuiBadge-badge': { fontSize: 9, height: 14, minWidth: 14, px: 0.5 } }}
+          >
+            <IconsaxIcon icon={Cpu} size={16} variant={live ? 'Bulk' : 'Linear'} />
+          </Badge>
+        </IconButton>
+      </Tooltip>
+      {open ? (
+        <AgentsModal
+          issueNumber={issue.number}
+          title={issue.title}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
     </Box>
   );
 }
@@ -1421,6 +1476,7 @@ export const Card = memo(CardImpl, (prev, next) => {
   if (a.labels.length !== b.labels.length) return false;
   if (a.assignees.length !== b.assignees.length) return false;
   if ((a.subIssueCount ?? 0) !== (b.subIssueCount ?? 0)) return false;
+  if ((a.runCount ?? 0) !== (b.runCount ?? 0)) return false;
   // Pre-review gate and PR/CI drive the state chip and the card's actions.
   const ga = a.reviewGate ?? null;
   const gb = b.reviewGate ?? null;
