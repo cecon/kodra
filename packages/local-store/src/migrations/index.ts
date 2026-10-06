@@ -73,6 +73,7 @@ export const migrations: readonly Migration[] = [
   m0032,
   m0033,
   m0034,
+  m0035,
 ];
 
 export type { Migration };
