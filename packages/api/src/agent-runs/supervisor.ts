@@ -102,6 +102,11 @@ export interface CreateSupervisorOptions {
    * `<repo>/.kodra/worktrees`: keeps the repos themselves clean.
    */
   worktreesRoot?: string;
+  /**
+   * The board has no code of its own (the global Kodra board): a card must
+   * carry a workspace for an agent to run on it.
+   */
+  requireWorkspace?: boolean;
   startAgentRun?: (opts: StartAgentRunOptions) => AgentRunHandle;
   createWorktree?: (input: CreateWorktreeInput) => Promise<Worktree>;
   stampWorktreeIdentity?: (
@@ -1592,6 +1597,14 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
   }
 
   async function start(input: StartRunInput): Promise<AgentRun> {
+    if (opts.requireWorkspace && input.repoId === undefined) {
+      const workspaceId = store.localIssues.findByNumber(input.issueNumber)?.workspaceId ?? null;
+      if (!workspaceId || !opts.registry?.get(workspaceId)) {
+        throw new Error(
+          `#${String(input.issueNumber)} has no workspace: open the card and pick the repo it should work in (Workspace).`,
+        );
+      }
+    }
     // Issue-thread chat sessions can host parallel runs on the same
     // thread (one per session), so scope the conflict check to the
     // session when one is provided — mirrors the startChat path.

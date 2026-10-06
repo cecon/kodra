@@ -8,7 +8,7 @@ import type { WorkspaceProfilePayload, WorkspaceStages } from './bridge.js';
  * entry carries the colour its cards wear on the board and the stages its
  * cards go through (local checks, human review, PR + CI, auto merge).
  *
- * It lives in the app's data folder rather than in any repo, so the board
+ * It lives in the app's data folder (workspace-registry.json) rather than in any repo, so the board
  * is not tied to the folder the app was opened on. Stored as one small JSON
  * file, written atomically.
  */

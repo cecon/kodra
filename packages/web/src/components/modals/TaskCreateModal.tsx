@@ -685,8 +685,8 @@ export function TaskCreateModal({
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                    No workspaces registered yet: the card works in the folder this board was opened
-                    on. Add repos in Configure → Workspaces.
+                    No workspaces yet: agents need one to know which repo to work in. Add your repos
+                    in Configure → Workspaces.
                   </div>
                 )}
               </div>

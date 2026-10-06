@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { promisify } from 'node:util';
@@ -479,11 +479,58 @@ async function ensureLocalWorkspace(repoPath: string): Promise<WorkspaceConfig> 
   return config;
 }
 
+/**
+ * The global Kodra board: a board of its own in the app data folder, not a
+ * repo of the user's. Cards there act on registered workspaces. It is a git
+ * repo only because the workspace machinery (store location, config) keys
+ * off a git root; agents never work in it.
+ */
+function boardHome(): string {
+  return join(app.getPath('userData'), 'board');
+}
+
+function isBoardHome(path: string): boolean {
+  return resolve(path).toLowerCase() === resolve(boardHome()).toLowerCase();
+}
+
+async function ensureBoardHome(): Promise<string> {
+  const dir = boardHome();
+  await mkdir(dir, { recursive: true });
+  if (!existsSync(join(dir, '.git'))) {
+    const git = (args: string[]) => execFileAsync('git', args, { cwd: dir });
+    await git(['init', '-q']);
+    await git([
+      '-c',
+      'user.name=Kodra',
+      '-c',
+      'user.email=kodra@localhost',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'Kodra board',
+    ]);
+  }
+  await mkdir(join(dir, '.kodra'), { recursive: true });
+  const config = await readWorkspaceConfig(dir);
+  if (!config || config.mode !== 'local' || config.name !== 'Kodra') {
+    await writeWorkspaceConfig(dir, {
+      ...(config ?? { mode: 'local', authorLogin: 'you' }),
+      mode: 'local',
+      name: 'Kodra',
+    } as WorkspaceConfig);
+  }
+  return dir;
+}
+
 /** App-level registry of workspaces (repos cards act on), shared by every
  *  opened board; lives in the app data folder, not in a repo. */
 let registrySingleton: WorkspaceRegistry | null = null;
 function workspaceRegistry(): WorkspaceRegistry {
-  registrySingleton ??= new WorkspaceRegistry(join(app.getPath('userData'), 'workspaces.json'));
+  // Not workspaces.json: that file already holds the recent-folders list.
+  registrySingleton ??= new WorkspaceRegistry(
+    join(app.getPath('userData'), 'workspace-registry.json'),
+  );
   return registrySingleton;
 }
 
@@ -792,6 +839,7 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
   const rawSupervisor = await createSupervisor({
     store,
     repoPath: gitRoot,
+    requireWorkspace: isBoardHome(gitRoot),
     registry: workspaceRegistry(),
     worktreesRoot: join(app.getPath('userData'), 'worktrees'),
     containmentMode,
@@ -1137,7 +1185,7 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
   });
 
   const displayName = config.mode === 'local' ? config.name : `${config.owner}/${config.repo}`;
-  await recordRecent(gitRoot, displayName);
+  if (!isBoardHome(gitRoot)) await recordRecent(gitRoot, displayName);
 
   return { repoPath: gitRoot, config };
 }
@@ -1456,6 +1504,14 @@ function registerIpc(): void {
   registerDeviceChatIpc();
 
   ipcMain.handle('kanbots:bootstrap', async (): Promise<BootstrapPayload> => {
+    // The app opens on the Kodra board, not on a folder picker.
+    if (!activeWorkspace && !activeCloudWorkspace) {
+      try {
+        await openWorkspaceInternal(await ensureBoardHome());
+      } catch (err) {
+        console.error('[main] could not open the Kodra board:', err);
+      }
+    }
     const [recents, cloudRecents, claudeAuthed, cloudStatus] = await Promise.all([
       pruneMissingRecents(),
       readCloudRecents(),

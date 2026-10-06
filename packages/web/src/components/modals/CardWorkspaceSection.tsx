@@ -78,7 +78,7 @@ export function CardWorkspaceSection({
             ? 'An agent is working on it: stop it to change the workspace.'
             : current
               ? current.path
-              : 'No workspace: the agent works in the folder this board was opened on.'
+              : 'No workspace: pick the repo this card works in before running an agent.'
         }
       >
         <MenuItem value="">

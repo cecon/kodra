@@ -235,7 +235,6 @@ function ShellHost({
     <ShellTheme theme={tweaks.theme}>
       <AppShell
         folderName={describeFolder(config)}
-        branch="main"
         drawerOpen={tweaks.showRail}
         onToggleDrawer={() => setTweak('showRail', !tweaks.showRail)}
         tweaksOpen={tweaksOpen}

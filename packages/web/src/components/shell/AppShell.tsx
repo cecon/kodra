@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
-import Chip from '@mui/material/Chip';
 import MuiAvatar from '@mui/material/Avatar';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -22,7 +19,6 @@ import {
 import type { IssueRef } from '@kanbots/core';
 import {
   Archive,
-  ArrowDown2,
   Book1,
   Chart2,
   Cloud,
@@ -87,7 +83,6 @@ export interface AppShellNav {
 
 export interface AppShellProps {
   folderName: string;
-  branch: string;
   drawerOpen: boolean;
   onToggleDrawer: () => void;
   tweaksOpen: boolean;
@@ -105,7 +100,6 @@ export interface AppShellProps {
  */
 export function AppShell({
   folderName,
-  branch,
   drawerOpen,
   onToggleDrawer,
   tweaksOpen,
@@ -135,7 +129,6 @@ export function AppShell({
       headerContent={
         <HeaderContent
           folderName={folderName}
-          branch={branch}
           tweaksOpen={tweaksOpen}
           onToggleTweaks={onToggleTweaks}
           onOpenPalette={nav.onOpenPalette}
@@ -266,60 +259,25 @@ function AccountFooter() {
 
 function HeaderContent({
   folderName,
-  branch,
   tweaksOpen,
   onToggleTweaks,
   onOpenPalette,
 }: {
   folderName: string;
-  branch: string;
   tweaksOpen: boolean;
   onToggleTweaks: () => void;
   onOpenPalette: () => void;
 }) {
   const bridge = getBridge();
-  const [repoMenu, setRepoMenu] = useState<HTMLElement | null>(null);
-
-  function switchRepository(): void {
-    setRepoMenu(null);
-    if (!bridge) return;
-    if (
-      !window.confirm(
-        `Close ${folderName} and pick another repository? Agents still running here may be interrupted.`,
-      )
-    ) {
-      return;
-    }
-    // Closing the workspace reloads the window onto the folder picker.
-    void bridge.closeWorkspace();
-  }
-
   return (
     <>
-      <Tooltip title="Switch repository">
-        <ButtonBase
-          onClick={(e) => setRepoMenu(e.currentTarget)}
-          aria-haspopup="menu"
-          sx={{ ml: 1, px: 1, py: 0.5, borderRadius: 1, minWidth: 0, gap: 1 }}
-        >
-          <IconsaxIcon icon={Element3} size={18} variant="Bulk" />
-          <Typography variant="h5" noWrap>
-            {folderName}
-          </Typography>
-          <Chip
-            label={branch}
-            size="small"
-            variant="outlined"
-            sx={{ fontFamily: 'monospace', height: 22 }}
-          />
-          <IconsaxIcon icon={ArrowDown2} size={14} />
-        </ButtonBase>
-      </Tooltip>
-      <Menu anchorEl={repoMenu} open={repoMenu !== null} onClose={() => setRepoMenu(null)}>
-        <MenuItem onClick={switchRepository} disabled={!bridge}>
-          Switch repository…
-        </MenuItem>
-      </Menu>
+      {/* One global board: no folder or branch to show or switch. */}
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', ml: 1, minWidth: 0 }}>
+        <IconsaxIcon icon={Element3} size={18} variant="Bulk" />
+        <Typography variant="h5" noWrap>
+          {folderName}
+        </Typography>
+      </Stack>
 
       <ButtonBase
         onClick={onOpenPalette}
