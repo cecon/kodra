@@ -398,6 +398,9 @@ export interface DecoratedIssue extends Issue {
 
 /** Stages a workspace's cards go through after the agent works. */
 export interface WorkspaceStages {
+  /** First run refines the acceptance criteria and waits for your approval
+   *  before writing code. */
+  spec: boolean;
   /** Pre-review checks: commit, dependencies, then `checkKinds`. */
   checks: boolean;
   checkKinds: Array<'lint' | 'typecheck' | 'tests'>;

@@ -18,6 +18,7 @@ import type {
  */
 
 export const DEFAULT_STAGES: WorkspaceStages = {
+  spec: false,
   checks: true,
   checkKinds: ['lint', 'typecheck', 'tests'],
   review: true,

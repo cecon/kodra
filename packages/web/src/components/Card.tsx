@@ -78,27 +78,73 @@ export function reviewGateOf(issue: Issue): ReviewGatePayload | null {
  * agent owns its worktree; a Review card is locked while its checks run,
  * and once they fail it can only go back to the agent (In progress).
  */
+/**
+ * The board is a state machine: from each column a card can only go to the
+ * next step(s). Inbox/Todo/Backlog → In progress (starts its agent); Review
+ * with green checks → PR (approve) or Done (approve + local merge, for
+ * workspaces without PRs) or back to In progress; failed checks → only back
+ * to In progress. In progress, PR and Done move by themselves or through
+ * their buttons, never by drag.
+ */
+export function allowedTargets(issue: Issue): ReadonlyArray<StatusKey | null> {
+  if (liveRunOf(issue) !== null) return [];
+  switch (issue.status) {
+    case null:
+    case 'backlog':
+    case 'todo':
+      return ['inProgress'];
+    case 'review': {
+      const gate = reviewGateOf(issue);
+      if (gate?.state === 'checking') return [];
+      if (gate && gate.state !== 'passed') return ['inProgress'];
+      const usesPr = issue.workspace ? issue.workspace.pr : true;
+      return usesPr ? ['pr', 'inProgress'] : ['done', 'inProgress'];
+    }
+    default:
+      return [];
+  }
+}
+
+const COLUMN_NAME: Record<string, string> = {
+  inbox: 'Inbox',
+  backlog: 'Backlog',
+  todo: 'Todo',
+  inProgress: 'In progress',
+  review: 'Review',
+  pr: 'PR',
+  done: 'Done',
+};
+
+/**
+ * Why the card can't go to `target` right now, or null when it can (see
+ * allowedTargets).
+ */
 export function moveBlockedReason(issue: Issue, target: StatusKey | null): string | null {
   if (liveRunOf(issue) !== null) {
     return `#${issue.number} has an agent working on it. Stop it first (⋯ → Stop agent) or wait for it to finish.`;
-  }
-  if (issue.status === 'pr') {
-    return `#${issue.number} has an open PR: merge it once CI passes (⋯ → Merge PR). A CI failure sends it back to the agent by itself.`;
-  }
-  if (target === 'pr' && issue.workspace && !issue.workspace.pr) {
-    return `${issue.workspace.name} doesn't use pull requests: approve #${issue.number} in Review to merge it locally.`;
-  }
-  if (target === 'pr' && issue.status !== 'review') {
-    return `Only a reviewed card goes to PR: approve #${issue.number} from Review.`;
   }
   const gate = reviewGateOf(issue);
   if (gate?.state === 'checking') {
     return `#${issue.number} is running its pre-review checks. Wait for them or stop them (⋯ → Stop checks).`;
   }
-  if (gate?.state === 'failed' && target !== 'inProgress') {
-    return `#${issue.number} failed its checks: it can only go back to the agent (drag it to In progress, or ⋯ → Send back to agent).`;
+  if (target === 'inProgress' && issue.status !== 'review' && !issue.workspace) {
+    return `#${issue.number} has no workspace: open it and pick the repo its agent works in.`;
   }
-  return null;
+  if (allowedTargets(issue).includes(target)) return null;
+  switch (issue.status) {
+    case 'inProgress':
+      return `#${issue.number} moves on by itself: when its agent finishes it goes to Review.`;
+    case 'pr':
+      return `#${issue.number} has an open PR: merge it once CI passes (Merge PR). A CI failure sends it back to the agent by itself.`;
+    case 'done':
+      return `#${issue.number} is done. Archive it from ⋯ if you want it off the board.`;
+    case 'review':
+      return gate && gate.state !== 'passed'
+        ? `#${issue.number} failed its checks: it can only go back to the agent (In progress).`
+        : `From Review #${issue.number} goes to ${issue.workspace && !issue.workspace.pr ? 'Done (approve and merge)' : 'PR (approve)'} or back to In progress.`;
+    default:
+      return `From ${COLUMN_NAME[issue.status ?? 'inbox']} #${issue.number} can only go to In progress, which starts its agent.`;
+  }
 }
 
 export function cardDragId(issueNumber: IssueRef): string {
@@ -1030,7 +1076,6 @@ function CardMenu({ issue }: { issue: Issue }) {
   const [stopError, setStopError] = useState<string | null>(null);
   const liveRun = liveRunOf(issue);
   const gate = reviewGateOf(issue);
-  const { focusedRepoId } = useFocusedRepo();
   // A failed gate only goes back to the agent (with its errors), and a
   // running one has to finish or be stopped first.
   const canRun =
@@ -1055,13 +1100,19 @@ function CardMenu({ issue }: { issue: Issue }) {
   }
 
   async function runAgent(): Promise<void> {
+    const blocked = moveBlockedReason(issue, 'inProgress');
+    if (blocked !== null && issue.status !== 'inProgress') throw new Error(blocked);
+    const before = issue.labels;
     if (issue.status !== 'inProgress') {
       await api.updateIssue(issue.number, { labels: withStatus(issue.labels, 'inProgress') });
     }
-    await api.dispatchIssue(issue.number, {
-      fromStatus: issue.status,
-      ...(focusedRepoId !== null ? { repoId: focusedRepoId } : {}),
-    });
+    try {
+      await api.dispatchIssue(issue.number, { fromStatus: issue.status });
+    } catch (err) {
+      // No agent, no In progress: back where it was.
+      await api.updateIssue(issue.number, { labels: before }).catch(() => undefined);
+      throw err;
+    }
   }
 
   async function remove(): Promise<void> {

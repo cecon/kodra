@@ -38,6 +38,7 @@ const CHECK_KINDS: Array<{ kind: WorkspaceStages['checkKinds'][number]; label: s
   { kind: 'tests', label: 'Tests' },
 ];
 const DEFAULT_STAGES: WorkspaceStages = {
+  spec: false,
   checks: true,
   checkKinds: ['lint', 'typecheck', 'tests'],
   review: true,
@@ -82,6 +83,7 @@ function draftOf(w: WorkspaceProfilePayload | null, index: number): Draft {
 /** The stages in flow order, as chips for the list. */
 function stageChips(s: WorkspaceStages): string[] {
   return [
+    s.spec ? 'Refine criteria' : null,
     'Agent',
     s.checks ? `Checks${s.checkKinds.length ? ` (${s.checkKinds.join(', ')})` : ''}` : null,
     s.review ? 'Your review' : null,
@@ -396,10 +398,20 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
 
             <Divider />
 
-            <Section title="Stages" caption="The agent always works first; then, in this order:">
+            <Section
+              title="Stages"
+              caption="What a card goes through once it enters In progress, in order:"
+            >
               <Stack spacing={1.25}>
                 <StageRow
                   step={1}
+                  title="Refine criteria first"
+                  description="The first run only refines the acceptance criteria and asks you to approve them; code comes after your yes."
+                  checked={draft.stages.spec}
+                  onChange={(on) => setStages({ spec: on })}
+                />
+                <StageRow
+                  step={2}
                   title="Local checks"
                   description="Before review: commit check, dependencies, then the checks you pick."
                   checked={draft.stages.checks}
@@ -428,21 +440,21 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
                   </Stack>
                 </StageRow>
                 <StageRow
-                  step={2}
+                  step={3}
                   title="Your review"
                   description="You approve the changes before they move on. Off: green checks approve by themselves."
                   checked={draft.stages.review}
                   onChange={(on) => setStages({ review: on })}
                 />
                 <StageRow
-                  step={3}
+                  step={4}
                   title="Pull request + CI"
                   description="Push and open a GitHub PR, waiting on its CI. Off: merge locally into the base branch."
                   checked={draft.stages.pr}
                   onChange={(on) => setStages({ pr: on, autoMerge: on && draft.stages.autoMerge })}
                 />
                 <StageRow
-                  step={4}
+                  step={5}
                   title="Auto merge"
                   description="Merge the PR by itself once CI is green. Off: you click Merge."
                   checked={draft.stages.pr && draft.stages.autoMerge}
@@ -496,12 +508,12 @@ export function WorkspacesSettingsModal({ onClose }: { onClose: () => void }) {
                     spacing={0.5}
                     sx={{ mt: 1, flexWrap: 'wrap', rowGap: 0.5 }}
                   >
-                    {stageChips(w.stages).map((s, i) => (
+                    {stageChips(w.stages).map((s) => (
                       <Chip
                         key={s}
                         size="small"
                         variant="light"
-                        color={i === 0 ? 'secondary' : 'primary'}
+                        color={s === 'Agent' ? 'secondary' : 'primary'}
                         label={s}
                       />
                     ))}

@@ -32,6 +32,7 @@ import { BoardToolbar } from '../components/board/BoardToolbar.js';
 import { AgentUsageRow } from '../components/board/AgentUsageRow.js';
 import { BulkActionBar, type BulkStatusTarget } from '../components/board/BulkActionBar.js';
 import {
+  allowedTargets,
   CardPreview,
   moveBlockedReason,
   reviewGateOf,
@@ -427,6 +428,9 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
       ? (list.find((i) => String(i.number) === String(activeNumber)) ?? null)
       : null;
 
+  // While dragging, the columns the card may go to (the board's state machine).
+  const dropTargets = activeIssue ? allowedTargets(activeIssue) : null;
+
   const stats = {
     issues: list.length,
     runs: list.filter((i) => i.agent === 'running').length,
@@ -463,6 +467,18 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
     const blocked = moveBlockedReason(current, targetStatus);
     if (blocked !== null) {
       setMoveError(blocked);
+      return;
+    }
+    // Review → Done is the approval of a workspace without PRs: merge locally.
+    if (targetStatus === 'done' && current.status === 'review') {
+      try {
+        await api.approveCard(issueNumber);
+        setMoveError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setMoveError(`Couldn't merge #${issueNumber}: ${message}`);
+      }
+      dispatchIssuesRefetch();
       return;
     }
     // Review → PR is your approval: push the branch and open its PR.
@@ -518,14 +534,17 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
 
     if (targetStatus === 'inProgress' && current.activeRun == null) {
       try {
-        await api.dispatchIssue(issueNumber, {
-          fromStatus,
-          ...(focusedRepoId !== null ? { repoId: focusedRepoId } : {}),
-        });
+        // The card's workspace decides the repo (no global focused repo).
+        await api.dispatchIssue(issueNumber, { fromStatus });
         dispatchIssuesRefetch();
       } catch (err) {
+        // No agent, no In progress: put the card back where it was.
         const message = err instanceof Error ? err.message : String(err);
-        setMoveError(`Moved #${issueNumber}, but couldn't start an agent: ${message}`);
+        await api
+          .updateIssue(issueNumber, { labels: withStatus(nextLabels, fromStatus) })
+          .catch(() => undefined);
+        dispatchIssuesRefetch();
+        setMoveError(`Couldn't start an agent on #${issueNumber}: ${message}`);
       }
     }
   }
@@ -802,6 +821,15 @@ export function Board({ onOpenDetail, onOpenCreate, onOpenStats }: BoardProps = 
                 onSelect={handleCardSelect}
                 onOpen={handleCardOpen}
                 stacked={stacked}
+                {...(dropTargets
+                  ? {
+                      dropState: dropTargets.includes(col.key)
+                        ? ('allowed' as const)
+                        : col.key === activeIssue?.status
+                          ? ('home' as const)
+                          : ('blocked' as const),
+                    }
+                  : {})}
                 {...(col.key === 'backlog' ? backlogColumnProps : NO_COLUMN_SUGGESTION_PROPS)}
               />
             );

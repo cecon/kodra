@@ -6,6 +6,7 @@ import type { HandlerDeps } from './types.js';
 
 const stagesSchema = z
   .object({
+    spec: z.boolean(),
     checks: z.boolean(),
     checkKinds: z.array(z.enum(['lint', 'typecheck', 'tests'])),
     review: z.boolean(),

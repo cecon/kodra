@@ -15,18 +15,10 @@ import { api, isCloudMode } from '../../api.js';
 import { CardPreview } from '../Card.js';
 import { notifyBacklogCreated } from '../BacklogToast.js';
 import { MarkdownEditor, type MarkdownEditorHandle } from '../forms/MarkdownEditor.js';
-import {
-  AGENT_RUN_PROVIDERS,
-  MODELS,
-  PROVIDER_LABELS,
-  type ModelPickerValue,
-} from '../forms/ModelPicker.js';
 import { useFetch } from '../../hooks/useFetch.js';
 import { useFocusTrap } from '../../hooks/useFocusTrap.js';
-import { useFocusedRepo } from '../../hooks/useFocusedRepo.js';
-import { dispatchIssuesRefetch } from '../../hooks/useIssues.js';
 import { priorityFromLabels, tagFromLabels } from '../../labels.js';
-import type { CardTemplatePayload, Issue, ProviderId } from '../../types.js';
+import type { CardTemplatePayload, Issue } from '../../types.js';
 import { shortcut } from '../../shortcuts.js';
 import { AiAssistButton } from '../forms/AiAssistButton.js';
 
@@ -64,50 +56,9 @@ function AiNote({
   );
 }
 
-type Mode = 'spec' | 'dispatch' | 'queue';
 type Tag = 'feat' | 'fix' | 'chore' | 'infra' | 'docs';
 type Priority = 'p0' | 'p1' | 'p2' | 'p3';
-// Legacy local type kept for downstream compat — the picker now drives
-// `selection: { provider, model }` as a free-form string pair.
-type Assignee = 'claude' | 'me';
-type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 type Template = 'bug' | 'feature' | 'refactor' | 'review' | 'spike';
-
-interface ModeDef {
-  id: Mode;
-  glyph: string;
-  name: string;
-  desc: string;
-  hint: string;
-  submitLabel: string;
-}
-
-const MODES: ModeDef[] = [
-  {
-    id: 'spec',
-    glyph: '✎',
-    name: 'Spec first',
-    desc: 'Run /spec to refine acceptance criteria. Wait for my approval.',
-    hint: 'Will create a worktree and run /spec — agent waits for approval.',
-    submitLabel: 'Create & spec',
-  },
-  {
-    id: 'dispatch',
-    glyph: '▶',
-    name: 'Create & dispatch',
-    desc: 'Spawn the agent immediately on a fresh worktree.',
-    hint: 'Will create a worktree and start coding immediately.',
-    submitLabel: 'Create & dispatch',
-  },
-  {
-    id: 'queue',
-    glyph: '◷',
-    name: 'Queue for later',
-    desc: "Sit in the Backlog. I'll start it manually.",
-    hint: 'Will land in Backlog. No worktree until you start it.',
-    submitLabel: 'Create task',
-  },
-];
 
 const TEMPLATES: Array<{ id: Template; icon: string; name: string }> = [
   { id: 'bug', icon: '!', name: 'Bug fix' },
@@ -117,57 +68,23 @@ const TEMPLATES: Array<{ id: Template; icon: string; name: string }> = [
   { id: 'spike', icon: '*', name: 'Spike' },
 ];
 
-const SPEC_SYSTEM_PROMPT = `You are running in /spec mode for a Kodra task.
-
-1. Read the user's request below (description / scope / acceptance criteria).
-2. Investigate the affected files via Read / Glob / Grep.
-3. Refine the acceptance criteria into a concrete, testable list.
-4. Emit a single decision card asking the user to approve the AC list before any code is written:
-
-\`\`\`kodra-decision
-{
-  "question": "Approve this acceptance criteria list?",
-  "options": [
-    {"value": "approve", "label": "Approve and start implementation"},
-    {"value": "edit", "label": "Edit the criteria"},
-    {"value": "cancel", "label": "Cancel the task"}
-  ]
-}
-\`\`\`
-
-After emitting the decision, end your turn — do not write any code.`;
-
 export interface TaskCreateModalProps {
   onClose: () => void;
   onCreated?: (issue: Issue) => void;
-  defaultMode?: Mode;
   initialDescription?: string;
 }
 
 export function TaskCreateModal({
   onClose,
   onCreated,
-  defaultMode = 'spec',
   initialDescription = '',
 }: TaskCreateModalProps) {
   const [title, setTitle] = useState('');
   const [customNumber, setCustomNumber] = useState('');
   const [body, setBody] = useState(initialDescription);
-  const [mode, setMode] = useState<Mode>(defaultMode);
   const [tpl, setTpl] = useState<Template>('feature');
-  const [assignee, setAssignee] = useState<Assignee>('claude');
-  const [modelSelection, setModelSelection] = useState<ModelPickerValue | null>(null);
-  const model = modelSelection?.model ?? 'opus';
-  const [effort, setEffort] = useState<Effort>('medium');
   const [tag, setTag] = useState<Tag>('feat');
   const [priority, setPriority] = useState<Priority>('p2');
-  const [checks, setChecks] = useState({
-    tsc: false,
-    tests: false,
-    lint: false,
-    e2e: false,
-    preview: false,
-  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<MarkdownEditorHandle | null>(null);
@@ -200,70 +117,9 @@ export function TaskCreateModal({
   const [aiBusy, setAiBusy] = useState<AiMode | null>(null);
   const [aiError, setAiError] = useState<{ mode: AiMode; message: string } | null>(null);
   const [aiUndo, setAiUndo] = useState<{ mode: AiMode; value: string } | null>(null);
-  const { repos, focused } = useFocusedRepo();
-  const showRepoCaption = repos.length > 1 && focused !== null;
   const [templates, setTemplates] = useState<CardTemplatePayload[]>([]);
   const [templateId, setTemplateId] = useState<number | ''>('');
   const modalRef = useFocusTrap<HTMLDivElement>(true);
-  const { data: providersData } = useFetch('providers', () => api.getProviders());
-
-  // Filtered agent providers — same rules as <ModelPicker agentRunsOnly>:
-  // enabled, has a key, and on the agent-runs allowlist. The agent and
-  // model pills both consume this so they can't drift.
-  const agentOptions = useMemo<Array<{ provider: ProviderId; modelIds: string[] }>>(() => {
-    if (!providersData) return [];
-    return providersData.providers
-      .filter((p) => p.hasKey && AGENT_RUN_PROVIDERS.includes(p.id))
-      .map((p) => ({ provider: p.id, modelIds: (MODELS[p.id] ?? []).map((m) => m.id) }));
-  }, [providersData]);
-
-  // Keep `modelSelection` in sync with the available providers:
-  //  - if it's null and providers have loaded, seed the first one (this
-  //    preserves the auto-pick behaviour the inline ModelPicker used to
-  //    do internally);
-  //  - if the currently selected provider was disabled / lost its key /
-  //    dropped from the allowlist, reset to the first available agent so
-  //    the user never sees a phantom selection in the model pill.
-  useEffect(() => {
-    if (agentOptions.length === 0) return;
-    const current = modelSelection;
-    if (!current) {
-      const first = agentOptions[0]!;
-      const firstModel = first.modelIds[0];
-      if (firstModel) setModelSelection({ provider: first.provider, model: firstModel });
-      return;
-    }
-    const available = agentOptions.find((o) => o.provider === current.provider);
-    if (!available || !available.modelIds.includes(current.model)) {
-      const first = agentOptions[0]!;
-      const firstModel = first.modelIds[0];
-      if (firstModel) setModelSelection({ provider: first.provider, model: firstModel });
-    }
-  }, [agentOptions, modelSelection]);
-
-  function onAgentChange(e: ChangeEvent<HTMLSelectElement>): void {
-    const provider = e.target.value as ProviderId;
-    if (!provider) return;
-    // Reset the model to the new provider's first catalogue entry. Users
-    // who care about a specific model re-pick it from the model pill,
-    // which is now strictly scoped to the selected agent.
-    const firstModel = (MODELS[provider] ?? [])[0]?.id ?? '';
-    if (!firstModel) return;
-    setModelSelection({ provider, model: firstModel });
-  }
-
-  function onModelChange(e: ChangeEvent<HTMLSelectElement>): void {
-    const model = e.target.value;
-    if (!modelSelection || !model) return;
-    setModelSelection({ provider: modelSelection.provider, model });
-  }
-
-  // Models visible in the model pill — strictly the catalogue for the
-  // currently selected agent, so the two pills can't go out of sync.
-  const modelOptions = useMemo(() => {
-    if (!modelSelection) return [] as Array<{ id: string; label: string }>;
-    return MODELS[modelSelection.provider] ?? [];
-  }, [modelSelection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,9 +172,6 @@ export function TaskCreateModal({
     }
     const nextPri = priorityFromLabels(t.labels);
     if (nextPri) setPriority(nextPri);
-    if (t.defaultProvider) {
-      setModelSelection({ provider: t.defaultProvider as ProviderId, model: 'opus' });
-    }
     // Defer caret placement until after React has committed the new body
     // value so selectionStart corresponds to the rendered DOM.
     queueMicrotask(() => {
@@ -438,44 +291,21 @@ export function TaskCreateModal({
       title: title || 'Untitled task',
       body,
       state: 'open',
-      labels: [
-        `type:${tag}`,
-        `priority:${priority}`,
-        mode === 'queue'
-          ? 'status:backlog'
-          : mode === 'spec'
-            ? 'status:todo'
-            : 'status:in-progress',
-      ],
-      assignees: assignee === 'claude' ? [] : ['you'],
+      // Same labels submit() creates: Inbox (no status), agent idle.
+      labels: [`type:${tag}`, `priority:${priority}`, 'agent:idle'],
+      assignees: [],
       user: { login: 'you', avatarUrl: null },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       closedAt: null,
       htmlUrl: '',
       isPullRequest: false,
-      status: mode === 'queue' ? 'backlog' : mode === 'spec' ? 'todo' : 'inProgress',
-      agent: mode === 'dispatch' ? 'running' : mode === 'spec' ? 'queued' : 'idle',
-      activeRun:
-        mode === 'dispatch' || mode === 'spec'
-          ? {
-              id: 0,
-              status: mode === 'spec' ? 'awaiting_input' : 'running',
-              branch: branchName,
-              model,
-              startedAt: new Date().toISOString(),
-              currentTool: mode === 'dispatch' ? 'Read' : null,
-              currentArg: mode === 'dispatch' ? 'preparing worktree…' : null,
-              totalCostUsd: null,
-              pendingDecision: null,
-              checks: null,
-              previewUrl: null,
-              previewState: null,
-            }
-          : null,
+      status: null,
+      agent: 'idle',
+      activeRun: null,
       sentryMeta: null,
     }),
-    [title, body, tag, priority, mode, assignee, model, branchName],
+    [title, body, tag, priority],
   );
 
   // Closing throws the draft away, so it is never a stray click on the
@@ -494,8 +324,6 @@ export function TaskCreateModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [requestClose]);
-
-  const modeDef = MODES.find((m) => m.id === mode) ?? MODES[0]!;
 
   async function submit(e?: FormEvent): Promise<void> {
     if (e) e.preventDefault();
@@ -518,53 +346,18 @@ export function TaskCreateModal({
     setSubmitting(true);
     setError(null);
     try {
-      const labels = [
-        `type:${tag}`,
-        `priority:${priority}`,
-        mode === 'queue'
-          ? 'status:backlog'
-          : mode === 'spec'
-            ? 'status:todo'
-            : 'status:in-progress',
-        ...(mode === 'dispatch' ? ['agent:running'] : mode === 'spec' ? ['agent:queued'] : []),
-      ];
+      // Every card is born in the Inbox with no agent: moving it to In
+      // progress is what starts one.
+      const labels = [`type:${tag}`, `priority:${priority}`, 'agent:idle'];
       const created = await api.createIssue({
         title: title.trim(),
         body: body.trim(),
         labels,
         ...(trimmedCustomNumber ? { number: trimmedCustomNumber } : {}),
-        ...(assignee === 'me' ? { assignees: ['you'] } : {}),
         ...(workspaceId ? { workspaceId } : {}),
       });
       notifyBacklogCreated(labels);
       onCreated?.(created);
-
-      if (mode === 'spec' || mode === 'dispatch') {
-        // Drop a kickoff message into the thread so the agent has a prompt.
-        const kickoff =
-          (body.trim() ? `${body.trim()}\n\n` : '') +
-          (mode === 'spec'
-            ? 'Refine the acceptance criteria first via /spec.'
-            : 'Implement this task. Run typecheck after each major edit.');
-        const messageRes = await api.postMessage(created.number, kickoff, { dispatch: false });
-        if (!messageRes.thread) {
-          throw new Error(`Could not initialise thread for issue #${created.number}`);
-        }
-        const threadId = messageRes.thread.id;
-        await api.startAgent(created.number, {
-          threadId,
-          prompt: kickoff,
-          ...(modelSelection
-            ? { model: modelSelection.model, provider: modelSelection.provider }
-            : { model }),
-          ...(mode === 'spec' ? { appendSystemPrompt: SPEC_SYSTEM_PROMPT } : {}),
-        });
-        // Cloud mode: onCreated above fired before the run row existed on
-        // the server, so the card's latest_run was still null when the
-        // parent refetched. Trigger another refresh now that startAgent
-        // has returned so the agent badge ("running"/"queued") shows up.
-        dispatchIssuesRefetch();
-      }
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -590,7 +383,6 @@ export function TaskCreateModal({
         body: body.trim(),
         labels,
         ...(trimmedCustomNumber ? { number: trimmedCustomNumber } : {}),
-        ...(assignee === 'me' ? { assignees: ['you'] } : {}),
         ...(workspaceId ? { workspaceId } : {}),
       });
       notifyBacklogCreated(labels);
@@ -641,7 +433,7 @@ export function TaskCreateModal({
                 <div className="kb-field">
                   <label className="kb-field-label">
                     From template
-                    <span className="kb-field-hint">prefill title, body, labels, agent</span>
+                    <span className="kb-field-hint">prefill title, body, labels</span>
                   </label>
                   <select
                     className="kb-input"
@@ -833,131 +625,6 @@ export function TaskCreateModal({
                 ) : null}
               </div>
 
-              {/* MODE */}
-              <div className="kb-field">
-                <label className="kb-field-label">How should this start?</label>
-                <div className="kb-modes">
-                  {MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`kb-mode-card${mode === m.id ? ' on' : ''}`}
-                      onClick={() => setMode(m.id)}
-                    >
-                      <div className="kb-mode-radio" aria-hidden />
-                      <div className="kb-mode-glyph" aria-hidden>
-                        {m.glyph}
-                      </div>
-                      <div className="kb-mode-name">{m.name}</div>
-                      <div className="kb-mode-desc">{m.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* AGENT */}
-              <div className="kb-field">
-                <label className="kb-field-label">Agent</label>
-                <div className="kb-sub-grid">
-                  <label className="kb-pill-select">
-                    <span className="lbl">assignee</span>
-                    <select
-                      value={assignee}
-                      onChange={(e) => setAssignee(e.target.value as Assignee)}
-                      className="kb-pill-select-native"
-                    >
-                      <option value="claude">agent (auto)</option>
-                      <option value="me">me (manual)</option>
-                    </select>
-                    <span className="caret">▾</span>
-                  </label>
-                  <label className="kb-pill-select">
-                    <span className="lbl">agent</span>
-                    <select
-                      className="kb-pill-select-native"
-                      value={modelSelection?.provider ?? ''}
-                      onChange={onAgentChange}
-                      disabled={agentOptions.length === 0}
-                      aria-label="Agent"
-                    >
-                      {agentOptions.length === 0 ? (
-                        <option value="">(no agents configured)</option>
-                      ) : null}
-                      {agentOptions.map((o) => (
-                        <option key={o.provider} value={o.provider}>
-                          {PROVIDER_LABELS[o.provider]}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="caret">▾</span>
-                  </label>
-                  <label className="kb-pill-select">
-                    <span className="lbl">model</span>
-                    <select
-                      className="kb-pill-select-native mono"
-                      value={modelSelection?.model ?? ''}
-                      onChange={onModelChange}
-                      disabled={modelOptions.length === 0}
-                      aria-label="Model"
-                    >
-                      {modelOptions.length === 0 ? <option value="">(no models)</option> : null}
-                      {modelOptions.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="caret">▾</span>
-                  </label>
-                  <label className="kb-pill-select">
-                    <span className="lbl">effort</span>
-                    <select
-                      value={effort}
-                      onChange={(e) => setEffort(e.target.value as Effort)}
-                      className="kb-pill-select-native mono"
-                    >
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                      <option value="xhigh">xhigh</option>
-                      <option value="max">max</option>
-                    </select>
-                    <span className="caret">▾</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* CHECKS */}
-              <div className="kb-field">
-                <label className="kb-field-label">
-                  Auto-run on each step
-                  <span className="kb-field-hint">surface failures inline on the card</span>
-                </label>
-                <div className="kb-checklist">
-                  {(
-                    [
-                      ['tsc', 'Typecheck', 'pnpm typecheck · ~4s'],
-                      ['tests', 'Unit tests', 'vitest · ~12s'],
-                      ['lint', 'Lint', 'eslint --cache · ~2s'],
-                      ['e2e', 'End-to-end', 'playwright · only on review-ready'],
-                      ['preview', 'Branch preview', 'live URL on the card'],
-                    ] as const
-                  ).map(([k, name, sub]) => (
-                    <label key={k}>
-                      <input
-                        type="checkbox"
-                        checked={checks[k]}
-                        onChange={(e) => setChecks({ ...checks, [k]: e.target.checked })}
-                      />
-                      <div>
-                        <b style={{ fontWeight: 500, color: 'var(--ink)' }}>{name}</b>
-                        <span className="lt">{sub}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
               {/* LABELS */}
               <div className="kb-field" style={{ marginBottom: 0 }}>
                 <label className="kb-field-label">Labels</label>
@@ -1025,59 +692,30 @@ export function TaskCreateModal({
                   marginBottom: 8,
                 }}
               >
-                {mode === 'queue' ? 'BACKLOG' : mode === 'spec' ? 'AWAITING INPUT' : 'IN PROGRESS'}
+                INBOX
               </div>
               <div className="kb-preview-card-wrap">
                 <CardPreview issue={previewIssue} />
-              </div>
-              <div
-                style={{
-                  marginTop: 12,
-                  fontSize: 11,
-                  color: 'var(--ink-3)',
-                  lineHeight: 1.55,
-                }}
-              >
-                Branch{' '}
-                <span style={{ fontFamily: 'var(--ff-mono)', color: 'var(--accent)' }}>
-                  {branchName}
-                </span>{' '}
-                off{' '}
-                <span style={{ fontFamily: 'var(--ff-mono)', color: 'var(--ink-1)' }}>main</span> in{' '}
-                <span style={{ fontFamily: 'var(--ff-mono)', color: 'var(--ink-2)' }}>
-                  .kodra/worktrees/issue-{customNumber.trim() || 'N'}-R
-                </span>
               </div>
             </div>
           </aside>
         </div>
 
         <div className="kb-modal-foot">
-          <span className="hint">{modeDef.hint}</span>
+          <span className="hint">
+            Cards start in the Inbox. Move one to In progress to start its agent.
+          </span>
           {error ? (
             <span style={{ color: 'var(--failed)', fontSize: 11.5 }} role="alert">
               {error}
             </span>
           ) : null}
           <span className="grow" />
-          {showRepoCaption && (mode === 'spec' || mode === 'dispatch') && focused ? (
-            <span
-              className="hint"
-              style={{ fontFamily: 'var(--ff-mono)' }}
-              title={focused.repoPath}
-            >
-              Will run in:{' '}
-              {focused.displayName ??
-                focused.repoPath.split('/').filter(Boolean).pop() ??
-                focused.repoPath}
-              {focused.targetBranch ? ` · ${focused.targetBranch}` : ''}
-            </span>
-          ) : null}
           <button type="button" className="kb-btn ghost" onClick={requestClose}>
             Cancel
           </button>
           <SplitButton
-            primaryLabel={submitting ? 'Creating…' : modeDef.submitLabel}
+            primaryLabel={submitting ? 'Creating…' : 'Create task'}
             primaryDisabled={submitting || pasting > 0 || !title.trim()}
             onPrimary={() => void submit()}
             options={[

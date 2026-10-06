@@ -58,6 +58,12 @@ export interface ColumnProps {
   /** Shares a lane with other columns (one above the other): fills its
    *  share of the lane's height instead of a fixed width. */
   stacked?: boolean;
+  /**
+   * While a card is dragged: `allowed` = a step it can go to (highlighted),
+   * `blocked` = it can't (dimmed, doesn't accept the drop), `home` = its own
+   * column. Undefined when nothing is being dragged.
+   */
+  dropState?: 'allowed' | 'blocked' | 'home';
 }
 
 export function Column({
@@ -74,10 +80,12 @@ export function Column({
   onSuggest,
   suggesting = false,
   stacked = false,
+  dropState,
   suggestingActivity,
   suggestingStartedAt = null,
 }: ColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(columnKey) });
+  const blocked = dropState === 'blocked';
+  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(columnKey), disabled: blocked });
   const selectedKeys = useMemo(() => {
     if (multiSelected === undefined) return undefined;
     const keys = new Set<string>();
@@ -100,11 +108,14 @@ export function Column({
         minHeight: 0,
         borderRadius: 2,
         bgcolor: isOver
-          ? alpha(t.palette.primary.main, 0.06)
-          : alpha(t.palette.secondary.main, t.palette.mode === 'dark' ? 0.06 : 0.04),
-        border: '1px dashed',
-        borderColor: isOver ? t.palette.primary.main : 'transparent',
-        transition: t.transitions.create(['background-color', 'border-color']),
+          ? alpha(t.palette.primary.main, 0.1)
+          : dropState === 'allowed'
+            ? alpha(t.palette.primary.main, 0.05)
+            : alpha(t.palette.secondary.main, t.palette.mode === 'dark' ? 0.06 : 0.04),
+        border: dropState === 'allowed' ? '2px dashed' : '1px dashed',
+        borderColor: isOver || dropState === 'allowed' ? t.palette.primary.main : 'transparent',
+        opacity: blocked ? 0.35 : 1,
+        transition: t.transitions.create(['background-color', 'border-color', 'opacity']),
       })}
     >
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', px: 1.75, pt: 1.5, pb: 1 }}>

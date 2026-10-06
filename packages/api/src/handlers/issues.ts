@@ -525,13 +525,46 @@ export async function dispatch(deps: HandlerDeps, args: DispatchArgs): Promise<D
     threadId: thread.id,
     issueNumber: parsed.number,
     prompt: kickoff,
-    appendSystemPrompt: buildTaskSystemPrompt(issue),
+    // A workspace with the spec stage refines the criteria on the card's
+    // first run and waits for approval before any code.
+    appendSystemPrompt:
+      priorRuns.length === 0 && profileOfIssue(deps, issue)?.stages.spec
+        ? `${buildTaskSystemPrompt(issue)}
+
+${SPEC_SYSTEM_PROMPT}`
+        : buildTaskSystemPrompt(issue),
     ...(parsed.model !== undefined ? { model: parsed.model } : {}),
     ...(parsed.provider !== undefined ? { provider: parsed.provider } : {}),
     ...(parsed.repoId !== undefined ? { repoId: parsed.repoId } : {}),
   });
   return { run, message };
 }
+
+/** The registered workspace a card acts on, if any. */
+function profileOfIssue(deps: HandlerDeps, issue: Issue) {
+  return issue.workspaceId ? (deps.registry?.get(issue.workspaceId) ?? null) : null;
+}
+
+/** The spec stage: refine acceptance criteria, then ask before coding. */
+export const SPEC_SYSTEM_PROMPT = `You are running in /spec mode for a Kodra task.
+
+1. Read the user's request below (description / scope / acceptance criteria).
+2. Investigate the affected files via Read / Glob / Grep.
+3. Refine the acceptance criteria into a concrete, testable list.
+4. Emit a single decision card asking the user to approve the AC list before any code is written:
+
+\`\`\`kodra-decision
+{
+  "question": "Approve this acceptance criteria list?",
+  "options": [
+    {"value": "approve", "label": "Approve and start implementation"},
+    {"value": "edit", "label": "Edit the criteria"},
+    {"value": "cancel", "label": "Cancel the task"}
+  ]
+}
+\`\`\`
+
+After emitting the decision, end your turn — do not write any code.`;
 
 export function decorateIssue(
   issue: Issue,
