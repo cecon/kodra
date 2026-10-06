@@ -233,7 +233,9 @@ export async function openPullRequest(
   let pr = await prForBranch(repoPath, branch);
   if (!pr || pr.state !== 'OPEN') {
     const issue = await deps.source.getIssue(number);
-    const base = latestRunOf(deps, number)?.baseBranch ?? null;
+    // Runs record the ref they forked from (often origin/main); a PR base is
+    // the branch name on the remote.
+    const base = branchOnRemote(latestRunOf(deps, number)?.baseBranch ?? null);
     await run(
       'gh',
       [
@@ -267,6 +269,12 @@ export function prTitle(title: string, labels: readonly string[]): string {
   // Already prefixed ("fix: …", "feat(ui): …", "feat!: …")? Leave it.
   const prefixed = new RegExp(`^${type ?? ''}(\\(.+\\))?!?:`, 'i');
   return type && !prefixed.test(title) ? `${type}: ${title}` : title;
+}
+
+/** `origin/main` → `main`; local names pass through; null stays null. */
+export function branchOnRemote(ref: string | null): string | null {
+  if (!ref) return null;
+  return ref.replace(/^refs\/(heads|remotes)\//, '').replace(/^origin\//, '');
 }
 
 /** You merge once CI passed; the card then goes to Done. */

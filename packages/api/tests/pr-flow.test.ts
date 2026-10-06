@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { priorityRank } from '../src/agent-queue.js';
 import { buildTaskSystemPrompt, commitTypeOf } from '../src/handlers/issues.js';
-import { ciOf, prTitle } from '../src/pr-flow.js';
+import { branchOnRemote, ciOf, prTitle } from '../src/pr-flow.js';
 
 describe('ciOf', () => {
   it('reports no CI when the PR has no checks', () => {
@@ -77,5 +77,14 @@ describe('card type and priority', () => {
   it('ranks P0 first and unprioritised last', () => {
     expect(priorityRank(['priority:p0'])).toBeLessThan(priorityRank(['priority:p3']));
     expect(priorityRank([])).toBeGreaterThan(priorityRank(['priority:p3']));
+  });
+});
+
+describe('branchOnRemote', () => {
+  it('turns the recorded base ref into a branch name for the PR', () => {
+    expect(branchOnRemote('origin/main')).toBe('main');
+    expect(branchOnRemote('refs/remotes/origin/develop')).toBe('develop');
+    expect(branchOnRemote('main')).toBe('main');
+    expect(branchOnRemote(null)).toBeNull();
   });
 });
