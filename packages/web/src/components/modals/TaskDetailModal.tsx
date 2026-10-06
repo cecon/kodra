@@ -29,7 +29,6 @@ import {
 } from '../../labels.js';
 import { AgentSpinner } from '../run/AgentSpinner.js';
 import { PreviewPanel, type PreviewInspectSelection } from '../run/PreviewPanel.js';
-import { RunSummary } from '../run/RunSummary.js';
 import { ToolUseCard } from '../run/ToolUseCard.js';
 import { CreatePrModal } from './CreatePrModal.js';
 import { ModalFrame } from './ModalFrame.js';
@@ -55,7 +54,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { renderMarkdown } from '../../lib/markdown.js';
 import { CardJourney } from './CardJourney.js';
-import { CardWorkspaceSection } from './CardWorkspaceSection.js';
+import { CardAgentPanel } from './CardAgentPanel.js';
 import type {
   AgentEvent,
   AgentRun,
@@ -90,9 +89,6 @@ const TAB_LABELS: Record<DetailTab, string> = {
   preview: 'Preview',
   runs: 'Runs',
 };
-/** Run states in which an agent is still working on the card. */
-const ACTIVE_RUN_STATUSES = new Set(['starting', 'running', 'awaiting_input']);
-
 type DetailTab = 'autopilot' | 'overview' | 'thread' | 'diff' | 'preview' | 'runs';
 
 const monoChipSx = { fontFamily: 'var(--ff-mono, monospace)' };
@@ -1002,35 +998,17 @@ function Aside({
 }) {
   const links = linkedIssueNumbers(issue.labels);
   const sidebarRun = activeRun ?? latestRun;
-  const sidebarHeader = activeRun ? 'Live run' : latestRun ? 'Last run' : 'Run';
   return (
     <>
-      <AsideSection title="Workspace">
-        <CardWorkspaceSection
-          issue={issue}
-          locked={activeRun !== null && ACTIVE_RUN_STATUSES.has(activeRun.status)}
-          onChanged={onChanged}
-        />
-      </AsideSection>
-
-      <AsideSection title={sidebarHeader}>
-        {sidebarRun ? (
-          <RunSummary run={sidebarRun} layout="aside" />
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            No agent runs yet.
-          </Typography>
-        )}
-      </AsideSection>
+      {/* The agent: state, numbers, where it works and its context. */}
+      <Box sx={{ px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <CardAgentPanel issue={issue} run={sidebarRun} onChanged={onChanged} />
+      </Box>
 
       <AsideSection title="Properties">
         <AsideRow label="Status" value={issue.status ?? 'inbox'} />
         <AsideRow label="Assignee" value={issue.assignees[0] ?? '—'} />
         <AsideRow label="Priority" value={priorityFromLabels(issue.labels) ?? '—'} />
-        <AsideRow label="Folder" value="current" mono />
-        <AsideRow label="Worktree" value={sidebarRun?.worktreePath ?? '—'} mono />
-        <AsideRow label="Branch" value={sidebarRun?.branchName ?? '—'} mono />
-        <AsideRow label="Base" value={sidebarRun?.baseBranch ?? '—'} mono />
       </AsideSection>
 
       {links.length > 0 ? (

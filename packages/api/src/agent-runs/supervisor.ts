@@ -524,6 +524,14 @@ export async function freeBranchName(repoPath: string, branch: string): Promise<
 
 export async function createSupervisor(opts: CreateSupervisorOptions): Promise<AgentSupervisor> {
   const { store } = opts;
+  /** Keep what the agent is given, so the card can show its context. */
+  const recordAgentContext = (runId: number, prompt: string, systemPrompt: string | undefined): void => {
+    try {
+      store.agentRuns.update(runId, { lastPrompt: prompt, systemPrompt: systemPrompt ?? null });
+    } catch {
+      // context is informative only
+    }
+  };
   const resolveRepoPath = (): string =>
     typeof opts.repoPath === 'function' ? opts.repoPath() : opts.repoPath;
   const startAgent = opts.startAgentRun ?? defaultStartAgentRun;
@@ -1518,6 +1526,7 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
     store.threads.setLastModel(input.threadId, provider, input.model ?? null);
     const translated = applyKanbotsCommand(input.prompt, input.appendSystemPrompt);
     const composed = composeSystemPrompt(run.id, translated.appendSystemPrompt);
+    recordAgentContext(run.id, translated.prompt, composed.prompt);
     persistBriefing(run.id, composed.briefing);
     applyAcpWorkspaceCommand();
     let handle: AgentRunHandle;
@@ -1576,6 +1585,7 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
     }
     const translated = applyKanbotsCommand(input.prompt, input.appendSystemPrompt);
     const composed = composeSystemPrompt(input.runId, translated.appendSystemPrompt);
+    recordAgentContext(input.runId, translated.prompt, composed.prompt);
     persistBriefing(input.runId, composed.briefing);
     applyAcpWorkspaceCommand();
     const handle = startAgent({
@@ -1768,6 +1778,7 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
       ? [recall, translated.appendSystemPrompt].filter(Boolean).join('\n\n')
       : translated.appendSystemPrompt;
     const composed = composeSystemPrompt(run.id, appendSystemPrompt);
+    recordAgentContext(run.id, translated.prompt, composed.prompt);
     persistBriefing(run.id, composed.briefing);
     applyAcpWorkspaceCommand();
     let handle: AgentRunHandle;
@@ -1841,6 +1852,7 @@ export async function createSupervisor(opts: CreateSupervisorOptions): Promise<A
 
     const translated = applyKanbotsCommand(input.prompt, input.appendSystemPrompt);
     const composed = composeSystemPrompt(input.runId, translated.appendSystemPrompt);
+    recordAgentContext(input.runId, translated.prompt, composed.prompt);
     persistBriefing(input.runId, composed.briefing);
     applyAcpWorkspaceCommand();
     const handle = startAgent({

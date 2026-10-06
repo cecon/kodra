@@ -32,6 +32,7 @@ import { migration as m0032 } from './0032-issue-folders.js';
 import { migration as m0033 } from './0033-issue-ref-text.js';
 import { migration as m0034 } from './0034-agent-runs-base-branch.js';
 import { migration as m0035 } from './0035-card-workspace.js';
+import { migration as m0036 } from './0036-run-agent-context.js';
 import type { Migration } from './types.js';
 
 // 0019-project-scope.ts is intentionally not imported here — it scaffolds
@@ -74,6 +75,7 @@ export const migrations: readonly Migration[] = [
   m0033,
   m0034,
   m0035,
+  m0036,
 ];
 
 export type { Migration };

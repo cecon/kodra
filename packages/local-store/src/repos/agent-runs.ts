@@ -18,6 +18,8 @@ interface AgentRunRow {
   base_branch: string | null;
   workspace_id: string | null;
   repo_path: string | null;
+  system_prompt: string | null;
+  last_prompt: string | null;
   pid: number | null;
   status: string;
   started_at: string;
@@ -56,6 +58,8 @@ function rowToAgentRun(row: AgentRunRow): AgentRun {
     baseBranch: row.base_branch,
     workspaceId: row.workspace_id ?? null,
     repoPath: row.repo_path ?? null,
+    systemPrompt: row.system_prompt ?? null,
+    lastPrompt: row.last_prompt ?? null,
     pid: row.pid,
     status: row.status as AgentRunStatus,
     startedAt: row.started_at,
@@ -99,6 +103,8 @@ export interface UpdateAgentRunPatch {
   baseBranch?: string | null;
   workspaceId?: string | null;
   repoPath?: string | null;
+  systemPrompt?: string | null;
+  lastPrompt?: string | null;
   pid?: number | null;
   endedAt?: string | null;
   tokenUsageInput?: number | null;
@@ -129,6 +135,8 @@ const PATCH_COLUMNS: Record<keyof UpdateAgentRunPatch, string> = {
   baseBranch: 'base_branch',
   workspaceId: 'workspace_id',
   repoPath: 'repo_path',
+  systemPrompt: 'system_prompt',
+  lastPrompt: 'last_prompt',
   pid: 'pid',
   endedAt: 'ended_at',
   tokenUsageInput: 'token_usage_input',
@@ -181,6 +189,8 @@ export class AgentRunsRepo {
       baseBranch,
       workspaceId: null,
       repoPath: null,
+      systemPrompt: null,
+      lastPrompt: null,
       pid: null,
       status,
       startedAt,

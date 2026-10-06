@@ -155,6 +155,10 @@ export interface AgentRun {
    *  null on runs from before cards carried a workspace. */
   workspaceId: string | null;
   repoPath: string | null;
+  /** What the agent was given: the composed system prompt and the last
+   *  prompt sent (kickoff or latest reply). */
+  systemPrompt: string | null;
+  lastPrompt: string | null;
   pid: number | null;
   status: AgentRunStatus;
   startedAt: string;
