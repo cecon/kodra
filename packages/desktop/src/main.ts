@@ -36,6 +36,7 @@ import {
   type SentryRuntime,
   type SuggestFeatureFn,
   type ToolBridge,
+  WorkspaceRegistry,
 } from '@kanbots/api';
 import {
   GitHubClient,
@@ -478,6 +479,14 @@ async function ensureLocalWorkspace(repoPath: string): Promise<WorkspaceConfig> 
   return config;
 }
 
+/** App-level registry of workspaces (repos cards act on), shared by every
+ *  opened board; lives in the app data folder, not in a repo. */
+let registrySingleton: WorkspaceRegistry | null = null;
+function workspaceRegistry(): WorkspaceRegistry {
+  registrySingleton ??= new WorkspaceRegistry(join(app.getPath('userData'), 'workspaces.json'));
+  return registrySingleton;
+}
+
 function broadcastIssueChange(): void {
   const sender = mainWindow?.webContents;
   if (!sender || sender.isDestroyed()) return;
@@ -783,6 +792,8 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
   const rawSupervisor = await createSupervisor({
     store,
     repoPath: gitRoot,
+    registry: workspaceRegistry(),
+    worktreesRoot: join(app.getPath('userData'), 'worktrees'),
     containmentMode,
     hasProviderCredentials: (id) => hasProviderCredentials(id, hasClaudeCodeCredentials),
     defaultRunCostBudgetUsd: () => budgetsState.runCostBudgetUsd,
@@ -953,6 +964,7 @@ async function openWorkspaceInternal(repoPath: string): Promise<ActiveWorkspaceI
       suggestIssue,
       draftPrDescription,
       assistField,
+      registry: workspaceRegistry(),
       autopilot,
       analyzeSentryError,
       sentry: sentryRuntime,
