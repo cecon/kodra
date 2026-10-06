@@ -444,6 +444,8 @@ export interface PullRequestPayload {
   ci: 'pending' | 'passed' | 'failed' | 'none';
   /** Names of the failing checks. */
   failing: string[];
+  /** The repo requires it up to date with its base and it isn't. */
+  behind?: boolean;
 }
 
 export type ReviewGateState = 'checking' | 'passed' | 'failed' | 'stopped';

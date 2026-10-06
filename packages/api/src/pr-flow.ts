@@ -175,7 +175,7 @@ export async function prForBranch(
       '--limit',
       '1',
       '--json',
-      'number,url,state,headRefOid,statusCheckRollup',
+      'number,url,state,headRefOid,statusCheckRollup,mergeStateStatus',
     ],
     repoPath,
   );
@@ -185,6 +185,7 @@ export async function prForBranch(
     state: 'OPEN' | 'MERGED' | 'CLOSED';
     headRefOid: string;
     statusCheckRollup: RollupItem[] | null;
+    mergeStateStatus?: string;
   }>;
   if (!pr) return null;
   return {
@@ -192,6 +193,7 @@ export async function prForBranch(
     url: pr.url,
     state: pr.state,
     headSha: pr.headRefOid,
+    behind: pr.mergeStateStatus === 'BEHIND',
     ...ciOf(pr.statusCheckRollup ?? [], hasWorkflows(repoPath)),
   };
 }
@@ -290,8 +292,26 @@ export async function mergePullRequest(
       `#${number}: CI has ${pr.ci === 'failed' ? 'failed' : 'not finished'}; merge once it passes`,
     );
   }
+  if (pr.behind) {
+    // The repo requires the branch to be up to date with its base: bring
+    // it up to date on GitHub; CI runs again and the merge unlocks after.
+    return updateBranch(deps, number, pr, repoPath);
+  }
   await run('gh', ['pr', 'merge', String(pr.number), '--merge'], repoPath);
   return finishMerged(deps, number, { ...pr, state: 'MERGED' });
+}
+
+/** Merges the base into the PR branch on GitHub (no local checkout). */
+async function updateBranch(
+  deps: HandlerDeps,
+  number: IssueRef,
+  pr: PullRequestPayload,
+  repoPath: string,
+): Promise<PullRequestPayload> {
+  await run('gh', ['pr', 'update-branch', String(pr.number)], repoPath);
+  const updated: PullRequestPayload = { ...pr, behind: false, ci: 'pending', failing: [] };
+  known.set(key(deps, number), updated);
+  return updated;
 }
 
 async function finishMerged(
@@ -409,6 +429,14 @@ export async function watchPullRequests(deps: HandlerDeps): Promise<boolean> {
     if (pr.state === 'MERGED') {
       await finishMerged(deps, issue.number, pr);
       changed = true;
+    } else if (pr.state === 'OPEN' && pr.behind && pr.ci !== 'failed' && pr.ci !== 'pending') {
+      // Behind its base: update it so it can merge once CI passes again.
+      try {
+        await updateBranch(deps, issue.number, pr, repoPath);
+        changed = true;
+      } catch {
+        // conflicts or no permission: left for the human (Open PR)
+      }
     } else if (
       pr.state === 'OPEN' &&
       (pr.ci === 'passed' || pr.ci === 'none') &&
