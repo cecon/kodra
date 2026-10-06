@@ -55,6 +55,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { renderMarkdown } from '../../lib/markdown.js';
 import { CardJourney } from './CardJourney.js';
+import { CardWorkspaceSection } from './CardWorkspaceSection.js';
 import type {
   AgentEvent,
   AgentRun,
@@ -89,6 +90,9 @@ const TAB_LABELS: Record<DetailTab, string> = {
   preview: 'Preview',
   runs: 'Runs',
 };
+/** Run states in which an agent is still working on the card. */
+const ACTIVE_RUN_STATUSES = new Set(['starting', 'running', 'awaiting_input']);
+
 type DetailTab = 'autopilot' | 'overview' | 'thread' | 'diff' | 'preview' | 'runs';
 
 const monoChipSx = { fontFamily: 'var(--ff-mono, monospace)' };
@@ -533,7 +537,14 @@ export function TaskDetailModal({ issueNumber, onClose, onOpenDetail }: TaskDeta
           bgcolor: 'background.default',
         }}
       >
-        {issue ? <Aside issue={issue} activeRun={activeRun} latestRun={latestRun} /> : null}
+        {issue ? (
+          <Aside
+            issue={issue}
+            activeRun={activeRun}
+            latestRun={latestRun}
+            onChanged={() => void refetch()}
+          />
+        ) : null}
       </Box>
     </ModalFrame>
   );
@@ -982,16 +993,26 @@ function Aside({
   issue,
   activeRun,
   latestRun,
+  onChanged,
 }: {
   issue: IssueDetailPayload['issue'];
   activeRun: AgentRun | null;
   latestRun: AgentRun | null;
+  onChanged: () => void;
 }) {
   const links = linkedIssueNumbers(issue.labels);
   const sidebarRun = activeRun ?? latestRun;
   const sidebarHeader = activeRun ? 'Live run' : latestRun ? 'Last run' : 'Run';
   return (
     <>
+      <AsideSection title="Workspace">
+        <CardWorkspaceSection
+          issue={issue}
+          locked={activeRun !== null && ACTIVE_RUN_STATUSES.has(activeRun.status)}
+          onChanged={onChanged}
+        />
+      </AsideSection>
+
       <AsideSection title={sidebarHeader}>
         {sidebarRun ? (
           <RunSummary run={sidebarRun} layout="aside" />

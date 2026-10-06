@@ -4,13 +4,10 @@ import { api } from '../../api.js';
 import { getBridge } from '../../desktop-bridge.js';
 import { useFetch } from '../../hooks/useFetch.js';
 import { useIssues } from '../../hooks/useIssues.js';
-import { useWorkspace } from '../../hooks/useWorkspace.js';
 import { ageString } from '../../labels.js';
 import type { ChatConversation, Issue } from '../../types.js';
 import { ActivitySection } from './ActivitySection.js';
 import { CollapsibleSection } from './CollapsibleSection.js';
-import { WorkspaceTree } from './WorkspaceTree.js';
-import { WorktreesSection } from './WorktreesSection.js';
 
 export interface LeftRailProps {
   selectedNumber: IssueRef | null;
@@ -169,53 +166,21 @@ function ChatList() {
 }
 
 /**
- * The workspace data sections shown under the drawer navigation: folder
- * tree, worktrees, activity, live agents and chats. The account menu that
+ * The data sections shown under the drawer navigation: activity, live
+ * agents and chats. (Repos and worktrees moved into each card.) The account menu that
  * used to sit at the bottom moved to the app shell (drawer nav + footer).
  */
-export function LeftRail({ selectedNumber, onSelectIssue, onOpenCloud }: LeftRailProps) {
-  const ws = useWorkspace();
+export function LeftRail({ selectedNumber, onSelectIssue }: LeftRailProps) {
   const { issues } = useIssues();
 
   const liveAgents = issues.filter(
     (i) => i.agent === 'running' || i.agent === 'blocked' || i.agent === 'review',
   );
 
-  const currentFolder = ws.folders.find((f) => f.current) ?? ws.folders[0] ?? null;
-
-  const headerName = currentFolder?.name ?? ws.workspace.name ?? 'Workspace';
-  const headerSubtitle = currentFolder?.branch ?? null;
-
   return (
     <div className="kb-rail kb-rail-embedded">
-      <CollapsibleSection
-        storageKey="workspace"
-        className="kb-rail-tree-section"
-        label="Workspace"
-        trailing={
-          ws.workspace.activeAgents > 0 ? (
-            <span
-              className="kb-rail-label-pulse"
-              aria-label={`${ws.workspace.activeAgents} active agents`}
-            >
-              <span className="kb-pulse" />
-              {ws.workspace.activeAgents}
-            </span>
-          ) : null
-        }
-      >
-        <WorkspaceTree
-          header={{ name: headerName, ...(headerSubtitle ? { subtitle: headerSubtitle } : {}) }}
-          folders={ws.folders}
-          folderPath={currentFolder?.path ?? null}
-          onSelectFolder={ws.setCurrentFolder}
-          onSelectIssue={onSelectIssue}
-          {...(onOpenCloud ? { onOpenCloudSettings: onOpenCloud } : {})}
-        />
-      </CollapsibleSection>
-
-      <WorktreesSection />
-
+      {/* Repos and worktrees live with each card now (task detail → Workspace),
+          not on the board. */}
       <ActivitySection onSelectIssue={onSelectIssue} />
 
       {liveAgents.length > 0 ? (
